@@ -1,0 +1,23 @@
+<robot name="micro4.0">
+  <link name="robot2/base_link">
+    <inertial><mass value="0.222"/><inertia ixx="0.00016" ixy="-8.18E-07" ixz="-2.74E-06" iyy="0.00017" iyz="1.64E-07" izz="0.0003"/></inertial>
+    <visual><geometry><mesh filename="base_link.STL"/></geometry><material name=""><color rgba="1 1 1 1"/></material></visual>
+    <collision><geometry><mesh filename="base_link.STL"/></geometry></collision>
+  </link>
+  <link name="robot2/zq_Link"><inertial><mass value="0.014"/><inertia ixx="2.66E-06" ixy="1.26E-10" ixz="3.48E-10" iyy="4.68E-06" iyz="1.13E-11" izz="2.66E-06"/></inertial><visual><geometry><mesh filename="zq_Link.STL"/></geometry><material name=""><color rgba="0.6 0.6 0.6 1"/></material></visual><collision><geometry><mesh filename="zq_Link.STL"/></geometry></collision></link>
+  <joint name="robot2/zq_Joint" type="continuous"><origin xyz="0.0455 0.0675 -0.02125" rpy="0 0 0"/><parent link="robot2/base_link"/><child link="robot2/zq_Link"/><axis xyz="0 1 0"/></joint>
+  <link name="robot2/yq_Link"><inertial><mass value="0.014"/><inertia ixx="2.66E-06" ixy="-1.2E-10" ixz="-7.3E-10" iyy="4.68E-06" iyz="-3.1E-11" izz="2.66E-06"/></inertial><visual><geometry><mesh filename="yq_Link.STL"/></geometry><material name=""><color rgba="0.6 0.6 0.6 1"/></material></visual><collision><geometry><mesh filename="yq_Link.STL"/></geometry></collision></link>
+  <joint name="robot2/yq_Joint" type="continuous"><origin xyz="0.0455 -0.0675 -0.02125" rpy="0 0 0"/><parent link="robot2/base_link"/><child link="robot2/yq_Link"/><axis xyz="0 -1 0"/></joint>
+  <link name="robot2/yh_Link"><inertial><mass value="0.014"/><inertia ixx="2.66E-06" ixy="5.3E-11" ixz="-2.0E-10" iyy="4.68E-06" iyz="1.1E-10" izz="2.66E-06"/></inertial><visual><geometry><mesh filename="yh_Link.STL"/></geometry><material name=""><color rgba="0.6 0.6 0.6 1"/></material></visual><collision><geometry><mesh filename="yh_Link.STL"/></geometry></collision></link>
+  <joint name="robot2/yh_Joint" type="continuous"><origin xyz="-0.0495 -0.0675 -0.02125" rpy="0 0 0"/><parent link="robot2/base_link"/><child link="robot2/yh_Link"/><axis xyz="0 -1 0"/></joint>
+  <link name="robot2/zh_Link"><inertial><mass value="0.014"/><inertia ixx="2.66E-06" ixy="1.26E-10" ixz="5.60E-10" iyy="4.68E-06" iyz="-8.8E-12" izz="2.66E-06"/></inertial><visual><geometry><mesh filename="zh_Link.STL"/></geometry><material name=""><color rgba="0.6 0.6 0.6 1"/></material></visual><collision><geometry><mesh filename="zh_Link.STL"/></geometry></collision></link>
+  <joint name="robot2/zh_Joint" type="continuous"><origin xyz="-0.0495 0.0675 -0.02125" rpy="0 0 0"/><parent link="robot2/base_link"/><child link="robot2/zh_Link"/><axis xyz="0 1 0"/></joint>
+  <link name="camera_yaw_link"><inertial><mass value="0.01"/><inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/></inertial><visual><geometry><box size="0.02 0.02 0.02"/></geometry></visual></link>
+  <joint name="camera_yaw_joint" type="revolute"><parent link="robot2/base_link"/><child link="camera_yaw_link"/><origin xyz="0.08 0 0.05" rpy="0 0 0"/><axis xyz="0 0 1"/><limit lower="-0.785" upper="0.785"/></joint>
+  <link name="camera_pitch_link"><inertial><mass value="0.01"/><inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/></inertial></link>
+  <joint name="camera_pitch_joint" type="revolute"><parent link="camera_yaw_link"/><child link="camera_pitch_link"/><origin xyz="0 0 0" rpy="0 0 0"/><axis xyz="0 1 0"/><limit lower="-0.785" upper="0.785"/></joint>
+  <link name="robot2/imu_Link"><inertial><mass value="0.013"/><inertia ixx="2.09E-06" ixy="-1.5E-08" ixz="-3.2E-10" iyy="4.73E-06" iyz="-2.2E-10" izz="6.79E-06"/></inertial><visual><geometry><box size="0.03 0.02 0.01"/></geometry><material name=""><color rgba="0.2 0.8 0.2 1"/></material></visual><collision><geometry><box size="0.03 0.02 0.01"/></geometry></collision></link>
+  <joint name="robot2/imu_Joint" type="fixed"><origin xyz="-0.002 -0.003 0.031" rpy="0 0 0"/><parent link="robot2/base_link"/><child link="robot2/imu_Link"/></joint>
+  <link name="robot2/radar_Link"><inertial><mass value="0.038"/><inertia ixx="8.81E-06" ixy="-1.6E-07" ixz="-1.1E-07" iyy="1.44E-05" iyz="-3.8E-08" izz="2.24E-05"/></inertial><visual><geometry><mesh filename="radar_Link.STL"/></geometry><material name=""><color rgba="0.1 0.1 0.1 1"/></material></visual><collision><geometry><mesh filename="radar_Link.STL"/></geometry></collision><site name="lidar_site" pos="0 0 0" type="sphere" size="0.01" rgba="0 1 1 0.5"/></link>
+  <joint name="robot2/radar_Joint" type="fixed"><origin xyz="0 0 0.1" rpy="0 0 0"/><parent link="robot2/base_link"/><child link="robot2/radar_Link"/></joint>
+</robot>

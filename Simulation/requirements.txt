@@ -9,6 +9,9 @@ keyboard>=0.13.5
 # Image processing for GUI
 Pillow>=8.0.0
 
+# Visualization
+matplotlib>=3.5.0
+
 # Testing framework
 pytest>=6.0.0
 pytest-cov>=2.10.0
