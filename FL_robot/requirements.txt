@@ -1,2 +1,13 @@
+# Core scientific computing
 numpy>=1.25.2
 scipy>=1.16.0
+
+# GUI framework
+tkinter  # Built into Python
+
+# ROS2 communication (for pc_link.py)
+rosbridge-suite>=0.11.13
+roslibpy>=1.8.0
+
+# Optional: For enhanced GUI features
+pillow>=10.0.0  # For image processing in GUI

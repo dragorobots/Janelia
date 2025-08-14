@@ -5,6 +5,62 @@ from tkinter import ttk, messagebox, filedialog
 import csv
 from datetime import datetime
 import os
+import roslibpy
+import threading
+import time
+
+# --- Robot Communication Class ---
+class RosLink:
+    def __init__(self, host, port=10090):
+        self.ros = roslibpy.Ros(host=host, port=port)
+        self.target = roslibpy.Topic(self.ros,'/hide_and_seek/target_spot','std_msgs/msg/Int32')
+        self.toggle = roslibpy.Topic(self.ros,'/hide_and_seek/toggles','std_msgs/msg/String')
+        self.cmdvel = roslibpy.Topic(self.ros,'/hide_and_seek/cmd_vel','geometry_msgs/msg/Twist')
+        self.lf = roslibpy.Topic(self.ros,'/line_follow/status','std_msgs/msg/String')
+        self.rat = roslibpy.Topic(self.ros,'/rat_detection/found','std_msgs/msg/Bool')
+        self.prog = roslibpy.Topic(self.ros,'/hide_and_seek/progress','std_msgs/msg/String')
+        self.connected = False
+        self.status_callbacks = []
+
+    def connect(self, on_lf=None, on_rat=None, on_prog=None):
+        try:
+            self.ros.run()
+            self.target.advertise()
+            self.toggle.advertise()
+            self.cmdvel.advertise()
+            if on_lf: self.lf.subscribe(lambda m: on_lf(m['data']))
+            if on_rat: self.rat.subscribe(lambda m: on_rat(bool(m['data'])))
+            if on_prog: self.prog.subscribe(lambda m: on_prog(m['data']))
+            self.connected = True
+            return True
+        except Exception as e:
+            print(f"Connection failed: {e}")
+            return False
+
+    def send_target(self, i):
+        if self.connected:
+            self.target.publish(roslibpy.Message({'data': int(i)}))
+
+    def send_toggle(self, s):
+        if self.connected:
+            self.toggle.publish(roslibpy.Message({'data': str(s)}))
+
+    def send_cmdvel(self, v, w):
+        if self.connected:
+            self.cmdvel.publish(roslibpy.Message({
+                'linear': {'x': float(v), 'y': 0.0, 'z': 0.0},
+                'angular': {'x': 0.0, 'y': 0.0, 'z': float(w)}
+            }))
+
+    def add_status_callback(self, callback):
+        self.status_callbacks.append(callback)
+
+    def close(self):
+        self.connected = False
+        for t in [self.target, self.toggle, self.cmdvel, self.lf, self.rat, self.prog]:
+            try: t.unadvertise()
+            except: pass
+        self.ros.terminate()
 
 # --- Core k-ToM Model Implementation (Corrected for Data Flow) ---
 class ToMAgent:
@@ -157,7 +213,7 @@ class RobotController:
         self.current_recommendation = choice
         return choice
 
-    def process_trial_result(self, rat_choice, was_found, time_taken):
+    def process_trial_result(self, rat_choice, was_found, time_taken, search_sequence=""):
         """Updates the k-ToM model and appends a detailed record to the trial log."""
         rat_choice_idx = int(rat_choice)
         robot_hid_spot = self.current_recommendation
@@ -176,7 +232,8 @@ class RobotController:
             "robot_hiding_spot": robot_hid_spot + 1,
             "rat_first_search": rat_choice_idx + 1,
             "was_found": was_found,
-            "time_to_find": time_taken
+            "time_to_find": time_taken,
+            "search_sequence": search_sequence
         }
         if self.k_level == 0:
             log_entry['k0_strategy'] = self.k0_strategy
@@ -213,9 +270,11 @@ class KToMExperimenterGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("k-ToM Hide and Seek Experimenter")
-        self.root.geometry("800x900")
+        self.root.geometry("1000x900")
         
         self.controller = RobotController()
+        self.robot_link = None
+        self.robot_status = "Disconnected"
         self.setup_gui()
         
     def setup_gui(self):
@@ -232,6 +291,11 @@ class KToMExperimenterGUI:
         trial_frame = ttk.Frame(notebook)
         notebook.add(trial_frame, text="Trial Execution")
         self.create_trial_tab(trial_frame)
+        
+        # Robot Control tab
+        robot_frame = ttk.Frame(notebook)
+        notebook.add(robot_frame, text="Robot Control")
+        self.create_robot_control_tab(robot_frame)
         
     def create_setup_tab(self, parent):
         # Title
@@ -312,12 +376,20 @@ class KToMExperimenterGUI:
         input_frame = ttk.LabelFrame(parent, text="Enter Trial Outcome", padding=10)
         input_frame.pack(fill='x', padx=10, pady=5)
         
-        # Rat's choice
+        # Rat's first search
         ttk.Label(input_frame, text="Rat's First Search (1-based):").pack(anchor='w')
         self.rat_choice_var = tk.IntVar(value=1)
         self.rat_choice_spin = ttk.Spinbox(input_frame, from_=1, to=10, textvariable=self.rat_choice_var)
         self.rat_choice_spin.pack(fill='x', pady=2)
         self.rat_choice_spin.bind('<KeyRelease>', self.on_rat_choice_change)
+        
+        # Complete search sequence
+        ttk.Label(input_frame, text="Complete Search Sequence (comma-separated, A-D or 1-4):").pack(anchor='w', pady=(10,0))
+        self.search_sequence_var = tk.StringVar(value="")
+        self.search_sequence_entry = ttk.Entry(input_frame, textvariable=self.search_sequence_var)
+        self.search_sequence_entry.pack(fill='x', pady=2)
+        ttk.Label(input_frame, text="Example: A,B,C,D or 1,2,3,4 or A,C,B (if found at B)", 
+                 font=('Arial', 8), foreground='gray').pack(anchor='w')
         
         # Found checkbox
         self.found_var = tk.BooleanVar(value=False)
@@ -367,6 +439,115 @@ class KToMExperimenterGUI:
         self.generate_log_button = ttk.Button(parent, text="Generate Trial Log (.csv)", 
                                             command=self.on_generate_log_clicked)
         self.generate_log_button.pack(pady=10)
+        
+    def create_robot_control_tab(self, parent):
+        # Title
+        title_label = ttk.Label(parent, text="3. Robot Control", font=('Arial', 16, 'bold'))
+        title_label.pack(pady=10)
+        
+        # Connection frame
+        connection_frame = ttk.LabelFrame(parent, text="Robot Connection", padding=10)
+        connection_frame.pack(fill='x', padx=10, pady=5)
+        
+        # Robot IP input
+        ttk.Label(connection_frame, text="Robot IP Address:").pack(anchor='w')
+        self.robot_ip_var = tk.StringVar(value="192.168.1.100")
+        self.robot_ip_entry = ttk.Entry(connection_frame, textvariable=self.robot_ip_var)
+        self.robot_ip_entry.pack(fill='x', pady=2)
+        
+        # Connection button
+        self.connect_button = ttk.Button(connection_frame, text="Connect to Robot", 
+                                        command=self.on_connect_robot)
+        self.connect_button.pack(pady=5)
+        
+        # Status display
+        self.robot_status_label = ttk.Label(connection_frame, text="Status: Disconnected", 
+                                           foreground='red')
+        self.robot_status_label.pack(pady=5)
+        
+        # Robot Control frame
+        control_frame = ttk.LabelFrame(parent, text="Robot Commands", padding=10)
+        control_frame.pack(fill='x', padx=10, pady=5)
+        
+        # Target spot selection
+        ttk.Label(control_frame, text="Target Hiding Spot:").pack(anchor='w')
+        self.target_spot_var = tk.StringVar(value="A")
+        target_combo = ttk.Combobox(control_frame, textvariable=self.target_spot_var, 
+                                   values=["A", "B", "C", "D"], state='readonly')
+        target_combo.pack(fill='x', pady=2)
+        
+        # Send target button
+        self.send_target_button = ttk.Button(control_frame, text="Send Target Spot", 
+                                            command=self.on_send_target)
+        self.send_target_button.pack(pady=5)
+        
+        # Mode toggles
+        ttk.Label(control_frame, text="Drive Mode:").pack(anchor='w', pady=(10,0))
+        self.drive_mode_var = tk.StringVar(value="auto_line")
+        drive_combo = ttk.Combobox(control_frame, textvariable=self.drive_mode_var, 
+                                  values=["auto_line", "manual_line", "manual_drive"], state='readonly')
+        drive_combo.pack(fill='x', pady=2)
+        
+        # Send drive mode button
+        self.send_drive_mode_button = ttk.Button(control_frame, text="Set Drive Mode", 
+                                                command=self.on_send_drive_mode)
+        self.send_drive_mode_button.pack(pady=5)
+        
+        # Rat detection mode
+        ttk.Label(control_frame, text="Rat Detection Mode:").pack(anchor='w', pady=(10,0))
+        self.rat_mode_var = tk.StringVar(value="auto")
+        rat_combo = ttk.Combobox(control_frame, textvariable=self.rat_mode_var, 
+                                values=["auto", "manual"], state='readonly')
+        rat_combo.pack(fill='x', pady=2)
+        
+        # Send rat mode button
+        self.send_rat_mode_button = ttk.Button(control_frame, text="Set Rat Mode", 
+                                              command=self.on_send_rat_mode)
+        self.send_rat_mode_button.pack(pady=5)
+        
+        # Manual found button
+        self.manual_found_button = ttk.Button(control_frame, text="Manual: Rat Found!", 
+                                             command=self.on_manual_found, style='Accent.TButton')
+        self.manual_found_button.pack(pady=10)
+        
+        # Manual driving frame
+        drive_frame = ttk.LabelFrame(parent, text="Manual Driving", padding=10)
+        drive_frame.pack(fill='x', padx=10, pady=5)
+        
+        # Speed controls
+        ttk.Label(drive_frame, text="Linear Speed (m/s):").pack(anchor='w')
+        self.linear_speed_var = tk.DoubleVar(value=0.2)
+        self.linear_speed_spin = ttk.Spinbox(drive_frame, from_=-1.0, to=1.0, increment=0.1, 
+                                           textvariable=self.linear_speed_var)
+        self.linear_speed_spin.pack(fill='x', pady=2)
+        
+        ttk.Label(drive_frame, text="Angular Speed (rad/s):").pack(anchor='w')
+        self.angular_speed_var = tk.DoubleVar(value=0.0)
+        self.angular_speed_spin = ttk.Spinbox(drive_frame, from_=-2.0, to=2.0, increment=0.1, 
+                                            textvariable=self.angular_speed_var)
+        self.angular_speed_spin.pack(fill='x', pady=2)
+        
+        # Send velocity button
+        self.send_velocity_button = ttk.Button(drive_frame, text="Send Velocity Command", 
+                                              command=self.on_send_velocity)
+        self.send_velocity_button.pack(pady=5)
+        
+        # Stop button
+        self.stop_button = ttk.Button(drive_frame, text="STOP", 
+                                     command=self.on_stop_robot, style='Accent.TButton')
+        self.stop_button.pack(pady=5)
+        
+        # Robot status frame
+        status_frame = ttk.LabelFrame(parent, text="Robot Status", padding=10)
+        status_frame.pack(fill='both', expand=True, padx=10, pady=5)
+        
+        # Status text widget
+        self.robot_status_text = tk.Text(status_frame, height=8, wrap='word')
+        status_scrollbar = ttk.Scrollbar(status_frame, orient='vertical', command=self.robot_status_text.yview)
+        self.robot_status_text.configure(yscrollcommand=status_scrollbar.set)
+        
+        self.robot_status_text.pack(side='left', fill='both', expand=True)
+        status_scrollbar.pack(side='right', fill='y')
         
     def on_k_level_change(self, event):
         if self.k_level_var.get() == 0:
@@ -419,6 +600,8 @@ class KToMExperimenterGUI:
         self.trial_num_label.config(text=f"Trial #{self.controller.trial_num}")
         self.recommendation_label.config(text=f"Robot Recommends Hiding In Spot: {recommendation + 1}")
         self.on_rat_choice_change(None)
+        # Clear search sequence for new trial
+        self.search_sequence_var.set("")
         self.update_display()
         
     def update_display(self):
@@ -426,9 +609,10 @@ class KToMExperimenterGUI:
         log_text = "Trial Log:\n"
         for entry in reversed(self.controller.trial_log):
             found_text = "✅ Found" if entry["was_found"] else "❌ Not Found"
+            sequence_text = f" | Sequence: {entry.get('search_sequence', 'N/A')}" if entry.get('search_sequence') else ""
             log_text += (f"Trial {entry['trial_num']}: Robot hid in {entry['robot_hiding_spot']}, "
                         f"Rat first searched {entry['rat_first_search']}. "
-                        f"({found_text} in {entry['time_to_find']:.1f}s)\n")
+                        f"({found_text} in {entry['time_to_find']:.1f}s){sequence_text}\n")
         self.trial_log_text.delete(1.0, tk.END)
         self.trial_log_text.insert(1.0, log_text)
         
@@ -442,7 +626,17 @@ class KToMExperimenterGUI:
             rat_choice = self.rat_choice_var.get() - 1
             if not (0 <= rat_choice < self.controller.num_spots):
                 raise ValueError(f"Rat's choice must be between 1 and {self.controller.num_spots}.")
-            self.controller.process_trial_result(rat_choice, bool(self.found_var.get()), self.time_var.get())
+            
+            # Process search sequence
+            search_sequence = self.search_sequence_var.get().strip()
+            if search_sequence:
+                # Validate search sequence format
+                try:
+                    self.validate_search_sequence(search_sequence)
+                except ValueError as e:
+                    raise ValueError(f"Invalid search sequence: {e}")
+            
+            self.controller.process_trial_result(rat_choice, bool(self.found_var.get()), self.time_var.get(), search_sequence)
             self.run_next_recommendation()
         except Exception as e:
             messagebox.showerror("Input Error", str(e))
@@ -475,7 +669,7 @@ class KToMExperimenterGUI:
             all_headers.update(entry.keys())
         header_order = [
             'trial_num', 'robot_k_level', 'num_hiding_spots', 'robot_hiding_spot',
-            'rat_first_search', 'was_found', 'time_to_find'
+            'rat_first_search', 'was_found', 'time_to_find', 'search_sequence'
         ]
         # Add k-level beliefs and predictions to the header
         k_belief_headers = sorted([h for h in all_headers if h.startswith('belief_rat_is_k')])
@@ -491,6 +685,131 @@ class KToMExperimenterGUI:
             writer.writerows(self.controller.trial_log)
         
         messagebox.showinfo("Success", f"Trial log saved to:\n{os.path.abspath(file_path)}")
+
+    # --- Robot Control Event Handlers ---
+    def on_connect_robot(self):
+        if self.robot_link is None or not self.robot_link.connected:
+            try:
+                robot_ip = self.robot_ip_var.get()
+                self.robot_link = RosLink(host=robot_ip, port=10090)
+                
+                # Set up status callbacks
+                def on_line_follow_status(status):
+                    self.update_robot_status(f"Line Follow: {status}")
+                
+                def on_rat_detection_status(found):
+                    self.update_robot_status(f"Rat Detection: {'Found' if found else 'Not Found'}")
+                
+                def on_progress_status(progress):
+                    self.update_robot_status(f"Progress: {progress}")
+                
+                # Connect with callbacks
+                if self.robot_link.connect(on_lf=on_line_follow_status, 
+                                         on_rat=on_rat_detection_status, 
+                                         on_prog=on_progress_status):
+                    self.robot_status = "Connected"
+                    self.robot_status_label.config(text="Status: Connected", foreground='green')
+                    self.connect_button.config(text="Disconnect")
+                    self.update_robot_status("Successfully connected to robot")
+                else:
+                    self.robot_status = "Connection Failed"
+                    self.robot_status_label.config(text="Status: Connection Failed", foreground='red')
+                    self.update_robot_status("Failed to connect to robot")
+                    
+            except Exception as e:
+                self.robot_status = "Connection Error"
+                self.robot_status_label.config(text="Status: Connection Error", foreground='red')
+                self.update_robot_status(f"Connection error: {str(e)}")
+        else:
+            # Disconnect
+            self.robot_link.close()
+            self.robot_link = None
+            self.robot_status = "Disconnected"
+            self.robot_status_label.config(text="Status: Disconnected", foreground='red')
+            self.connect_button.config(text="Connect to Robot")
+            self.update_robot_status("Disconnected from robot")
+
+    def on_send_target(self):
+        if self.robot_link and self.robot_link.connected:
+            target = self.target_spot_var.get()
+            # Convert A,B,C,D to 0,1,2,3
+            target_map = {"A": 0, "B": 1, "C": 2, "D": 3}
+            target_idx = target_map.get(target, 0)
+            self.robot_link.send_target(target_idx)
+            self.update_robot_status(f"Sent target spot: {target} (index: {target_idx})")
+        else:
+            messagebox.showwarning("Warning", "Not connected to robot!")
+
+    def on_send_drive_mode(self):
+        if self.robot_link and self.robot_link.connected:
+            mode = self.drive_mode_var.get()
+            self.robot_link.send_toggle(f"drive_mode={mode}")
+            self.update_robot_status(f"Set drive mode: {mode}")
+        else:
+            messagebox.showwarning("Warning", "Not connected to robot!")
+
+    def on_send_rat_mode(self):
+        if self.robot_link and self.robot_link.connected:
+            mode = self.rat_mode_var.get()
+            self.robot_link.send_toggle(f"rat_mode={mode}")
+            self.update_robot_status(f"Set rat detection mode: {mode}")
+        else:
+            messagebox.showwarning("Warning", "Not connected to robot!")
+
+    def on_manual_found(self):
+        if self.robot_link and self.robot_link.connected:
+            # Send manual found signal
+            self.robot_link.send_toggle("manual_found=true")
+            self.update_robot_status("Sent manual 'rat found' signal")
+        else:
+            messagebox.showwarning("Warning", "Not connected to robot!")
+
+    def on_send_velocity(self):
+        if self.robot_link and self.robot_link.connected:
+            linear = self.linear_speed_var.get()
+            angular = self.angular_speed_var.get()
+            self.robot_link.send_cmdvel(linear, angular)
+            self.update_robot_status(f"Sent velocity: linear={linear}, angular={angular}")
+        else:
+            messagebox.showwarning("Warning", "Not connected to robot!")
+
+    def on_stop_robot(self):
+        if self.robot_link and self.robot_link.connected:
+            self.robot_link.send_cmdvel(0.0, 0.0)
+            self.update_robot_status("Sent STOP command")
+        else:
+            messagebox.showwarning("Warning", "Not connected to robot!")
+
+    def validate_search_sequence(self, sequence):
+        """Validate search sequence format (A-D or 1-4, comma-separated)"""
+        if not sequence:
+            return True
+            
+        # Split by comma and clean up
+        spots = [spot.strip().upper() for spot in sequence.split(',')]
+        
+        # Check for valid spot labels
+        valid_labels = set(['A', 'B', 'C', 'D', '1', '2', '3', '4'])
+        for spot in spots:
+            if spot not in valid_labels:
+                raise ValueError(f"Invalid spot label: {spot}. Use A-D or 1-4.")
+        
+        # Check for duplicates
+        if len(spots) != len(set(spots)):
+            raise ValueError("Duplicate spots in sequence.")
+        
+        return True
+
+    def update_robot_status(self, message):
+        timestamp = datetime.now().strftime('%H:%M:%S')
+        status_line = f"[{timestamp}] {message}\n"
+        self.robot_status_text.insert(tk.END, status_line)
+        self.robot_status_text.see(tk.END)
+        # Keep only last 100 lines
+        lines = self.robot_status_text.get(1.0, tk.END).split('\n')
+        if len(lines) > 100:
+            self.robot_status_text.delete(1.0, tk.END)
+            self.robot_status_text.insert(1.0, '\n'.join(lines[-100:]))
 
 def main():
     root = tk.Tk()

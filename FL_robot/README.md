@@ -1,173 +1,229 @@
-# FL_robot — Dev & Live Link Guide
+# Hide and Seek Robot System
 
-This folder sets up two things for the Yahboom car(s):
-1) **Git workflow** — edit on your PC, push to GitHub, pull/rebuild on any robot.
-2) **Live link** — your PC app talks to the robot over Wi‑Fi via rosbridge (WebSocket).
+A complete ROS2-based robot control system for automated hide-and-seek experiments with rats, featuring k-ToM (Theory of Mind) modeling and PC-GUI integration.
 
----
+## 🚀 System Overview
 
-## Repo layout (relevant)
+This system consists of:
+- **Robot Node** (`hide_and_seek.py`): Main robot behavior controller
+- **Bridge Node** (`hide_and_seek_bridge.py`): PC-robot communication bridge
+- **PC GUI** (`ktom_experimenter.py`): Experiment control and k-ToM analysis interface
+- **Integration Tests** (`test_integration.py`): System validation tests
+
+## 📋 Features
+
+### Robot Capabilities
+- **Line Following**: Computer vision-based colored line tracking
+- **Rat Detection**: LiDAR-based proximity detection
+- **Reward Dispensing**: Automated cheerio dispenser
+- **State Machine**: Complete trial automation
+- **Manual Override**: PC-controlled manual operation
+
+### k-ToM Integration
+- **Multi-level Theory of Mind**: k=0, k=1, k=2, k=3 modeling
+- **Adaptive Strategy**: Robot learns and adapts to rat behavior
+- **Real-time Analysis**: Live belief and prediction tracking
+- **Data Logging**: Comprehensive trial outcome recording
+
+### PC Control Interface
+- **Real-time Status**: Live robot state monitoring
+- **Manual Control**: Direct robot movement control
+- **Experiment Setup**: k-ToM level and parameter configuration
+- **Data Export**: CSV logging with timestamped folders
+
+## 🏗️ Architecture
 
 ```
-Janelia/
-  FL_robot/
-    hide_and_seek.py              # your working script (symlinked as working dir)
-    hide_and_seek_bridge.py       # robot-side ROS 2 bridge node (PC <-> robot topics)
-    update_robot.sh               # pull from GitHub + colcon build + source
-    start_pc_link.sh              # start rosbridge (:10090) + bridge node
-    README.md
-    CHANGELOG.md
+PC GUI (ktom_experimenter.py)
+    ↓ WebSocket (port 10090)
+Bridge Node (hide_and_seek_bridge.py)
+    ↓ ROS2 Topics
+Robot Node (hide_and_seek.py)
+    ↓ Hardware
+Robot (Camera, LiDAR, Motors, Servos)
 ```
 
-Robot working path is symlinked to this repo folder:
+### Communication Protocol
 
-```
-/root/yahboomcar_ws/src/yahboomcar_astra/hide_and_seek  ->  /root/yahboomcar_ws/src/Janelia/FL_robot
-```
+| PC → Robot | Topic | Message Type | Purpose |
+|------------|-------|--------------|---------|
+| Target Spot | `/hide_and_seek/target_spot` | `std_msgs/Int32` | Set hiding location (0-3) |
+| Drive Mode | `/hide_and_seek/toggles` | `std_msgs/String` | `drive_mode=auto_line/manual_line/manual_drive` |
+| Rat Mode | `/hide_and_seek/toggles` | `std_msgs/String` | `rat_mode=auto/manual` |
+| Manual Found | `/hide_and_seek/manual_found` | `std_msgs/Bool` | Manual rat detection signal |
+| Line Color | `/hide_and_seek/line_color` | `std_msgs/String` | `hue=220` (degrees) |
+| Velocity | `/hide_and_seek/cmd_vel` | `geometry_msgs/Twist` | Manual driving commands |
 
----
+| Robot → PC | Topic | Message Type | Purpose |
+|------------|-------|--------------|---------|
+| Line Status | `/line_follow/status` | `std_msgs/String` | `following/searching/stopped` |
+| Rat Detection | `/rat_detection/found` | `std_msgs/Bool` | Rat proximity status |
+| Progress | `/hide_and_seek/progress` | `std_msgs/String` | Current trial phase |
 
-## Daily workflow
+## 🛠️ Installation
 
-### On your Windows PC (cmd.exe)
-Edit files in:
-```
-C:\Users\andyc\Code\Janelia\Janelia\FL_robot\
-```
-Then:
-```bat
-cd C:\Users\andyc\Code\Janelia\Janelia
-git add FL_robot\*
-git commit -m "Your message"
-git push
-```
+### Prerequisites
+- Python 3.8+
+- ROS2 (Humble or later)
+- OpenCV
+- NumPy, SciPy
 
-### On any robot (inside the Docker container)
+### Dependencies
 ```bash
-/root/yahboomcar_ws/src/Janelia/FL_robot/update_robot.sh
+pip install -r requirements.txt
 ```
-This pulls latest, rebuilds (`colcon build --symlink-install`), and sources the workspace.
 
----
+### Robot Setup
+1. Ensure ROS2 is installed and sourced
+2. Install required ROS2 packages:
+   ```bash
+   sudo apt install ros-humble-geometry-msgs ros-humble-sensor-msgs ros-humble-std-msgs
+   ```
 
-## Live PC ↔ Robot link (rosbridge on **port 10090**)
+## 🚀 Usage
 
-### Start it on the robot (container)
+### 1. Deploy to Robot
 ```bash
-/root/yahboomcar_ws/src/Janelia/FL_robot/start_pc_link.sh
-# Starts: rosbridge websocket on :10090 + hide_and_seek_bridge.py
+./update_robot.sh
 ```
 
-### Minimal test from the PC
-```bat
-python - <<^PY
-import roslibpy, time
-ros = roslibpy.Ros(host='<ROBOT_IP>', port=10090)  # e.g., 10.0.0.234
-ros.run(); print('connected?', ros.is_connected)
-t = roslibpy.Topic(ros, '/hide_and_seek/target_spot', 'std_msgs/msg/Int32')
-t.advertise(); t.publish(roslibpy.Message({'data': 3})); time.sleep(0.5)
-t.unadvertise(); ros.terminate()
-^PY
-```
-
-**Robot should log (from bridge):** `target_spot=3`
-
-### Topics
-
-**PC → Robot**
-- `/hide_and_seek/target_spot` (`std_msgs/msg/Int32`)
-- `/hide_and_seek/toggles` (`std_msgs/msg/String`) — e.g. `line_follow=on;rat_detect=off`
-- `/hide_and_seek/cmd_vel` (`geometry_msgs/msg/Twist`)
-
-**Robot → PC**
-- `/line_follow/status` (`std_msgs/msg/String`)
-- `/rat_detection/found` (`std_msgs/msg/Bool`)
-- `/hide_and_seek/progress` (`std_msgs/msg/String`)
-
----
-
-## First-time setup on a **new robot** (Robot B)
-
-1) **SSH key for GitHub (unique per robot)**
+### 2. Start Robot System
 ```bash
-ssh-keygen -t ed25519 -C "robot-b" -f ~/.ssh/id_ed25519 -N ""
-cat ~/.ssh/id_ed25519.pub
+./start_hide_and_seek.sh
 ```
-Add the printed key in GitHub: **Settings → SSH and GPG keys → New SSH key**.
 
-2) **Clone & link**
+### 3. Start PC GUI
 ```bash
-cd /root/yahboomcar_ws/src
-git clone git@github.com:dragorobots/Janelia.git
-mv /root/yahboomcar_ws/src/yahboomcar_astra/hide_and_seek \
-   /root/yahboomcar_ws/src/yahboomcar_astra/hide_and_seek.bak.$(date +%F-%H%M%S) 2>/dev/null || true
-ln -s /root/yahboomcar_ws/src/Janelia/FL_robot \
-      /root/yahboomcar_ws/src/yahboomcar_astra/hide_and_seek
+python ktom_experimenter.py
 ```
 
-3) **Build & start live link**
+### 4. Connect and Run Experiments
+1. Open the "Robot Control" tab in the GUI
+2. Enter robot IP address (default: 192.168.1.100)
+3. Click "Connect to Robot"
+4. Configure experiment parameters in "Setup" tab
+5. Run trials and monitor results
+
+## 📊 Experiment Workflow
+
+### 1. Setup Phase
+- Configure robot's k-ToM level (0-3)
+- Set number of hiding spots (2-10)
+- For k=0: Configure strategy (patterned/percentage)
+
+### 2. Trial Execution
+- Robot recommends hiding spot based on k-ToM model
+- Robot follows colored line to target location
+- Robot waits for rat detection (LiDAR or manual)
+- Robot dispenses reward when rat approaches
+- Robot returns home via line following
+- **Data Collection**: Record complete rat search sequence (A-D or 1-4, comma-separated)
+
+### 3. Data Collection
+- Trial outcomes automatically logged
+- k-ToM beliefs and predictions recorded
+- CSV export with timestamped folders
+- Real-time model state display
+
+## 🧪 Testing
+
+Run comprehensive integration tests:
 ```bash
-/root/yahboomcar_ws/src/Janelia/FL_robot/update_robot.sh
-/root/yahboomcar_ws/src/Janelia/FL_robot/start_pc_link.sh
+python test_integration.py
 ```
 
-4) **PC connects to new robot IP**
-Use `Ros(host='<ROBOT_B_IP>', port=10090)`.
+Tests include:
+- ✅ RosLink communication
+- ✅ GUI integration
+- ✅ k-ToM functionality
+- ✅ File saving
 
-> **Recommended:** start the container with `--network=host` to avoid port mapping/tunnels.
-> ```
-> docker run -d --name ros2_robot --network=host \
->   -v /root/yahboomcar_ws:/root/yahboomcar_ws \
->   <your-image> bash -lc "sleep infinity"
-> ```
+## 📁 File Structure
 
----
+```
+FL_robot/
+├── hide_and_seek.py              # Main robot node
+├── hide_and_seek_bridge.py       # PC-robot bridge
+├── ktom_experimenter.py          # PC GUI application
+├── test_integration.py           # Integration tests
+├── start_hide_and_seek.sh        # Robot launch script
+├── update_robot.sh               # Deployment script
+├── requirements.txt              # Python dependencies
+├── CURSOR_BRIEF.md              # Development context
+└── README.md                    # This file
+```
 
-## Things that will differ per robot
+## 🔧 Configuration
 
-- **Robot IP address** (PC must use the correct `host='<robot_ip>'`).
-- **SSH key** (each robot uses a unique SSH key added to GitHub).
-- **Container name** (we use `ros2_robot` in examples; yours may differ).
-- **Networking mode** (prefer `--network=host`; if using bridge, ensure port 10090 is reachable or use an SSH tunnel).
-- **DNS/Apt state** (some images need the ROS apt key refreshed; see troubleshooting).
+### Robot Parameters
+- `linear_speed`: Line following speed (default: 0.12 m/s)
+- `LIDAR_PROXIMITY_LIMIT`: Rat detection distance (default: 0.15m)
+- `WAIT_DURATION`: Maximum wait time (default: 120s)
+- `turn_duration`: Return turn duration (default: 7.5s)
 
----
+### k-ToM Parameters
+- `learning_rate`: Belief update rate (default: 0.7)
+- `beta`: Softmax temperature (default: 3.0)
+- `LIDAR_PERSISTENCE_COUNT`: Detection confirmation (default: 3)
 
-## Troubleshooting
+## 🐛 Troubleshooting
 
-- **PC connects but robot logs nothing**
-  - Use ROS 2 type strings (`std_msgs/msg/Int32`) and call `advertise()` before `publish()`.
-  - Make sure **only one** rosbridge is running (we standardize on port **10090**).
+### Common Issues
 
-- **Port already in use**
-  ```bash
-  pkill -f rosbridge_websocket || true
-  pkill -f rosapi_node || true
-  /root/yahboomcar_ws/src/Janelia/FL_robot/start_pc_link.sh
-  ```
+1. **Connection Failed**
+   - Check robot IP address
+   - Ensure rosbridge server is running
+   - Verify network connectivity
 
-- **Build error “cannot create symlink … Is a directory”**
-  ```
-  rm -rf build/<pkg> install/<pkg> log
-  colcon build --symlink-install
-  ```
+2. **Line Following Issues**
+   - Adjust HSV color range
+   - Check camera calibration
+   - Verify lighting conditions
 
-- **ROS apt key/index warnings**
-  Refresh ROS key & list:
-  ```bash
-  curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
-    -o /usr/share/keyrings/ros-archive-keyring.gpg
-  echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] \
-  http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" \
-  > /etc/apt/sources.list.d/ros2.list
-  apt update
-  ```
+3. **LiDAR Detection Problems**
+   - Clean LiDAR sensor
+   - Adjust proximity limits
+   - Check for environmental interference
 
----
+### Debug Mode
+Enable verbose logging by setting ROS log level:
+```bash
+ros2 run hide_and_seek hide_and_seek_node --ros-args --log-level debug
+```
 
-## CHANGELOG
+## 📈 Data Analysis
 
-Keep operational notes in `FL_robot/CHANGELOG.md`, e.g.:
-- `2025-08-14 – Standardized rosbridge :10090, added start_pc_link.sh`
-- `2025-08-14 – Robot A linked; PC publish/echo verified`
-- `2025-08-15 – Robot B setup: new SSH key, IP=<...>, host networking`
+### CSV Output Format
+- `trial_num`: Sequential trial number
+- `robot_k_level`: Robot's k-ToM level
+- `robot_hiding_spot`: Where robot hid (1-based)
+- `rat_first_search`: Rat's first search location
+- `was_found`: Whether rat found robot
+- `time_to_find`: Time to discovery (if found)
+- `search_sequence`: Complete search sequence (comma-separated A-D or 1-4)
+- `belief_rat_is_k*`: Robot's beliefs about rat's sophistication
+- `pred_rat_searches_spot*`: Robot's search predictions
+
+### Analysis Tools
+- Use the GUI's real-time model state display
+- Export CSV data for statistical analysis
+- Monitor belief evolution across trials
+
+## 🤝 Contributing
+
+1. Follow the established code structure
+2. Add tests for new features
+3. Update documentation
+4. Test on both PC and robot platforms
+
+## 📄 License
+
+This project is part of the Janelia Research Campus FL_robot system.
+
+## 🆘 Support
+
+For issues and questions:
+1. Check the troubleshooting section
+2. Run integration tests
+3. Review ROS2 logs
+4. Consult the CURSOR_BRIEF.md for development context

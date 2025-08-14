@@ -3,7 +3,7 @@ import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import LaserScan
-from std_msgs.msg import UInt16, Int32
+from std_msgs.msg import UInt16, Int32, String, Bool
 import cv2
 import numpy as np
 import time
@@ -71,6 +71,18 @@ class HideAndSeekNode(Node):
         self.lidar_sub = self.create_subscription(LaserScan, '/scan', self.lidar_callback, 10)
         self.servo1_pub = self.create_publisher(Int32, '/servo_s1', 10) # Camera Yaw
         self.servo2_pub = self.create_publisher(Int32, '/servo_s2', 10) # Dispenser
+        
+        # --- PC Communication Subscribers ---
+        self.target_spot_sub = self.create_subscription(Int32, '/hide_and_seek/target_spot', self.target_spot_callback, 10)
+        self.toggles_sub = self.create_subscription(String, '/hide_and_seek/toggles', self.toggles_callback, 10)
+        self.cmd_vel_pc_sub = self.create_subscription(Twist, '/hide_and_seek/cmd_vel', self.cmd_vel_pc_callback, 10)
+        self.manual_found_sub = self.create_subscription(Bool, '/hide_and_seek/manual_found', self.manual_found_callback, 10)
+        self.line_color_sub = self.create_subscription(String, '/hide_and_seek/line_color', self.line_color_callback, 10)
+        
+        # --- PC Communication Publishers ---
+        self.line_follow_status_pub = self.create_publisher(String, '/line_follow/status', 10)
+        self.rat_detection_pub = self.create_publisher(Bool, '/rat_detection/found', 10)
+        self.progress_pub = self.create_publisher(String, '/hide_and_seek/progress', 10)
 
         # --- Main Robot State ---
         self.main_state = RobotState.START
@@ -122,10 +134,73 @@ class HideAndSeekNode(Node):
         self.settings = termios.tcgetattr(sys.stdin)
         self.manual_speed = 0.2
         self.manual_turn = 1.0
+        
+        # --- PC Communication Variables ---
+        self.pc_target_spot = 0
+        self.pc_drive_mode = "auto_line"  # auto_line, manual_line, manual_drive
+        self.pc_rat_mode = "auto"  # auto, manual
+        self.pc_manual_found = False
+        self.pc_line_color_hue = None
+        self.pc_override_active = False
 
         # --- Main Control Loop ---
         self.timer = self.create_timer(0.1, self.main_loop)
         self.get_logger().info("Node initialized. Starting in START state.")
+
+    # --- PC Communication Callbacks ---
+    def target_spot_callback(self, msg):
+        """Handle target spot selection from PC"""
+        self.pc_target_spot = msg.data
+        self.get_logger().info(f"PC set target spot: {self.pc_target_spot}")
+        
+        # Publish progress update
+        progress_msg = String()
+        progress_msg.data = f"target_spot_set:{self.pc_target_spot}"
+        self.progress_pub.publish(progress_msg)
+
+    def toggles_callback(self, msg):
+        """Handle toggle commands from PC"""
+        toggle_str = msg.data
+        self.get_logger().info(f"PC toggle: {toggle_str}")
+        
+        if toggle_str.startswith("drive_mode="):
+            self.pc_drive_mode = toggle_str.split("=")[1]
+            self.get_logger().info(f"PC drive mode: {self.pc_drive_mode}")
+            
+        elif toggle_str.startswith("rat_mode="):
+            self.pc_rat_mode = toggle_str.split("=")[1]
+            self.get_logger().info(f"PC rat mode: {self.pc_rat_mode}")
+            
+        elif toggle_str == "manual_found=true":
+            self.pc_manual_found = True
+            self.get_logger().info("PC manual 'rat found' signal")
+
+    def cmd_vel_pc_callback(self, msg):
+        """Handle velocity commands from PC"""
+        if self.pc_drive_mode == "manual_drive":
+            self.cmd_vel_pub.publish(msg)
+            self.get_logger().info(f"PC manual drive: linear={msg.linear.x}, angular={msg.angular.z}")
+
+    def manual_found_callback(self, msg):
+        """Handle manual found signal from PC"""
+        if msg.data:
+            self.pc_manual_found = True
+            self.get_logger().info("PC manual 'rat found' signal")
+
+    def line_color_callback(self, msg):
+        """Handle line color selection from PC"""
+        color_str = msg.data
+        if color_str.startswith("hue="):
+            try:
+                self.pc_line_color_hue = int(color_str.split("=")[1])
+                self.get_logger().info(f"PC line color hue: {self.pc_line_color_hue}")
+                
+                # Publish progress update
+                progress_msg = String()
+                progress_msg.data = f"line_color_set:{self.pc_line_color_hue}"
+                self.progress_pub.publish(progress_msg)
+            except ValueError:
+                self.get_logger().error(f"Invalid PC hue value: {color_str}")
 
     def getKey(self):
         tty.setraw(sys.stdin.fileno())
@@ -168,11 +243,57 @@ class HideAndSeekNode(Node):
         elif self.main_state == RobotState.MANUAL_CONTROL:
             self.execute_manual_control()
 
+        # Publish status updates to PC
+        self.publish_status_updates()
+        
         cv2.imshow(self.cv_window_name, display_view)
         key = cv2.waitKey(1) & 0xFF
         if key == ord('q'):
             self.destroy_node()
             rclpy.shutdown()
+
+    def publish_status_updates(self):
+        """Publish current status to PC"""
+        # Publish line follow status
+        line_status_msg = String()
+        if self.pc_drive_mode == "manual_drive":
+            line_status_msg.data = "manual_drive_mode"
+        elif self.pc_drive_mode == "manual_line":
+            line_status_msg.data = "manual_line_mode"
+        elif self.main_state == RobotState.FOLLOWING_LINE:
+            if self.follow_state == FollowState.TRACKING:
+                line_status_msg.data = "following"
+            elif self.follow_state == FollowState.SEARCHING:
+                line_status_msg.data = "searching"
+            elif self.follow_state == FollowState.REVERSING:
+                line_status_msg.data = "reversing"
+            else:
+                line_status_msg.data = "stopped"
+        else:
+            line_status_msg.data = "idle"
+        self.line_follow_status_pub.publish(line_status_msg)
+        
+        # Publish progress updates
+        progress_msg = String()
+        if self.main_state == RobotState.START:
+            progress_msg.data = "start_phase"
+        elif self.main_state == RobotState.PICK_COLOR:
+            progress_msg.data = "pick_color_phase"
+        elif self.main_state == RobotState.FOLLOWING_LINE:
+            progress_msg.data = "following_line"
+        elif self.main_state == RobotState.WAITING_FOR_RAT:
+            progress_msg.data = "waiting_for_rat"
+        elif self.main_state == RobotState.DISPENSING:
+            progress_msg.data = "dispensing"
+        elif self.main_state == RobotState.TURNING:
+            progress_msg.data = "turning"
+        elif self.main_state == RobotState.RETURNING_HOME:
+            progress_msg.data = "returning_home"
+        elif self.main_state == RobotState.RESET:
+            progress_msg.data = "reset"
+        elif self.main_state == RobotState.MANUAL_CONTROL:
+            progress_msg.data = "manual_control"
+        self.progress_pub.publish(progress_msg)
 
     def execute_start_phase(self):
         self.get_logger().info("STATE: START - Signaling trial start.")
@@ -202,6 +323,11 @@ class HideAndSeekNode(Node):
             cv2.rectangle(frame, self.box_start_point, self.box_end_point, (0, 255, 0), 2)
 
     def execute_line_follow(self, frame, returning=False):
+        # Check if PC has set a drive mode that overrides line following
+        if self.pc_drive_mode == "manual_drive":
+            # PC is controlling the robot directly
+            return None
+            
         if self.target_hsv_range is None:
             self.stop_robot()
             return None
@@ -286,12 +412,30 @@ class HideAndSeekNode(Node):
 
         cv2.putText(frame, "Waiting for the rat...", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
         
-        if self.rat_detected:
+        # Check for PC manual found signal
+        if self.pc_manual_found and self.pc_rat_mode == "manual":
+            self.get_logger().info("STATE: WAITING_FOR_RAT - PC manual 'rat found' signal!")
+            self.main_state = RobotState.DISPENSING
+            self.pc_manual_found = False
+            self.action_start_time = None
+            self.lidar_baseline = None
+            
+            # Publish rat detection status
+            found_msg = Bool()
+            found_msg.data = True
+            self.rat_detection_pub.publish(found_msg)
+        
+        elif self.rat_detected and self.pc_rat_mode == "auto":
             self.get_logger().info("STATE: WAITING_FOR_RAT - Rat detected!")
             self.main_state = RobotState.DISPENSING
             self.rat_detected = False
             self.action_start_time = None
             self.lidar_baseline = None
+            
+            # Publish rat detection status
+            found_msg = Bool()
+            found_msg.data = True
+            self.rat_detection_pub.publish(found_msg)
         
         elif time.time() - self.action_start_time > self.WAIT_DURATION:
             self.get_logger().info("STATE: WAITING_FOR_RAT - Timeout. No rat detected.")
