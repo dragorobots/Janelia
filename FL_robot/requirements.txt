@@ -11,3 +11,6 @@ roslibpy>=1.8.0
 
 # Optional: For enhanced GUI features
 pillow>=10.0.0  # For image processing in GUI
+
+# Color measurement tool
+opencv-python>=4.8.0  # For camera feed and color analysis

@@ -113,6 +113,12 @@ python ktom_experimenter.py
   - Option to kill hide_and_seek processes via SSH
   - Visual status indicator shows abort mode
 
+### Color Measurement and Line Configuration
+- **🎨 Color Measurer Tool**: Standalone script for measuring line colors
+- **Pre-defined Colors**: Configure RGB values for Start, A, B, C, D lines
+- **Toggle Switch**: Enable/disable pre-defined color usage
+- **ROI Selection**: Click and drag to select regions of interest on camera feed
+
 ## 📊 Experiment Workflow
 
 ### 1. Setup Phase
@@ -154,6 +160,7 @@ FL_robot/
 ├── hide_and_seek.py              # Main robot node
 ├── hide_and_seek_bridge.py       # PC-robot bridge
 ├── ktom_experimenter.py          # PC GUI application
+├── color_measurer.py             # Color measurement tool
 ├── test_integration.py           # Integration tests
 ├── start_hide_and_seek.sh        # Robot launch script
 ├── update_robot.sh               # Deployment script

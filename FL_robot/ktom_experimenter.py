@@ -350,6 +350,57 @@ class KToMExperimenterGUI:
         self.percentage_entry = ttk.Entry(self.percentage_frame, textvariable=self.percentage_var)
         self.percentage_entry.pack(fill='x', pady=2)
         
+        # Line Color Configuration frame
+        line_color_frame = ttk.LabelFrame(setup_frame, text="Line Color Configuration", padding=10)
+        line_color_frame.pack(fill='x', pady=10)
+        
+        # Pre-defined colors toggle
+        self.use_predefined_colors_var = tk.BooleanVar(value=False)
+        self.predefined_colors_check = ttk.Checkbutton(line_color_frame, 
+                                                      text="Use Pre-defined Colors", 
+                                                      variable=self.use_predefined_colors_var,
+                                                      command=self.on_predefined_colors_toggle)
+        self.predefined_colors_check.pack(anchor='w', pady=5)
+        
+        # Line color inputs
+        self.line_colors_frame = ttk.Frame(line_color_frame)
+        self.line_colors_frame.pack(fill='x', pady=5)
+        
+        # Start line color
+        ttk.Label(self.line_colors_frame, text="Start Line (RGB, comma-separated):").pack(anchor='w')
+        self.start_color_var = tk.StringVar(value="255,0,0")
+        self.start_color_entry = ttk.Entry(self.line_colors_frame, textvariable=self.start_color_var)
+        self.start_color_entry.pack(fill='x', pady=2)
+        
+        # Line A color
+        ttk.Label(self.line_colors_frame, text="Line A (RGB, comma-separated):").pack(anchor='w')
+        self.line_a_color_var = tk.StringVar(value="0,255,0")
+        self.line_a_color_entry = ttk.Entry(self.line_colors_frame, textvariable=self.line_a_color_var)
+        self.line_a_color_entry.pack(fill='x', pady=2)
+        
+        # Line B color
+        ttk.Label(self.line_colors_frame, text="Line B (RGB, comma-separated):").pack(anchor='w')
+        self.line_b_color_var = tk.StringVar(value="0,0,255")
+        self.line_b_color_entry = ttk.Entry(self.line_colors_frame, textvariable=self.line_b_color_var)
+        self.line_b_color_entry.pack(fill='x', pady=2)
+        
+        # Line C color
+        ttk.Label(self.line_colors_frame, text="Line C (RGB, comma-separated):").pack(anchor='w')
+        self.line_c_color_var = tk.StringVar(value="255,255,0")
+        self.line_c_color_entry = ttk.Entry(self.line_colors_frame, textvariable=self.line_c_color_var)
+        self.line_c_color_entry.pack(fill='x', pady=2)
+        
+        # Line D color
+        ttk.Label(self.line_colors_frame, text="Line D (RGB, comma-separated):").pack(anchor='w')
+        self.line_d_color_var = tk.StringVar(value="255,0,255")
+        self.line_d_color_entry = ttk.Entry(self.line_colors_frame, textvariable=self.line_d_color_var)
+        self.line_d_color_entry.pack(fill='x', pady=2)
+        
+        # Color measurer button
+        self.color_measurer_button = ttk.Button(line_color_frame, text="🎨 Open Color Measurer", 
+                                               command=self.open_color_measurer)
+        self.color_measurer_button.pack(pady=5)
+        
         # Start button
         self.start_button = ttk.Button(setup_frame, text="Start Challenge", 
                                       command=self.on_start_button_clicked, style='Accent.TButton')
@@ -358,6 +409,9 @@ class KToMExperimenterGUI:
         # Initialize k0 frame visibility
         self.on_k_level_change(None)
         self.on_k0_strategy_change()
+        
+        # Initialize line color entries as disabled
+        self.on_predefined_colors_toggle()
         
     def create_trial_tab(self, parent):
         # Title
@@ -455,7 +509,7 @@ class KToMExperimenterGUI:
         
         # Robot IP input
         ttk.Label(connection_frame, text="Robot IP Address:").pack(anchor='w')
-        self.robot_ip_var = tk.StringVar(value="192.168.1.100")
+        self.robot_ip_var = tk.StringVar(value="10.0.0.234")
         self.robot_ip_entry = ttk.Entry(connection_frame, textvariable=self.robot_ip_var)
         self.robot_ip_entry.pack(fill='x', pady=2)
         
@@ -589,6 +643,81 @@ class KToMExperimenterGUI:
             self.pattern_frame.pack_forget()
             self.percentage_frame.pack(fill='x', pady=5)
             
+    def on_predefined_colors_toggle(self):
+        """Handle predefined colors toggle"""
+        if self.use_predefined_colors_var.get():
+            # Enable color inputs
+            for entry in [self.start_color_entry, self.line_a_color_entry, 
+                         self.line_b_color_entry, self.line_c_color_entry, self.line_d_color_entry]:
+                entry.config(state='normal')
+        else:
+            # Disable color inputs
+            for entry in [self.start_color_entry, self.line_a_color_entry, 
+                         self.line_b_color_entry, self.line_c_color_entry, self.line_d_color_entry]:
+                entry.config(state='disabled')
+                
+    def open_color_measurer(self):
+        """Open the color measurer tool"""
+        try:
+            import subprocess
+            import sys
+            
+            # Get the robot IP from the robot control tab
+            robot_ip = self.robot_ip_var.get()
+            
+            # Start color measurer in a separate process
+            if sys.platform.startswith('win'):
+                subprocess.Popen([sys.executable, 'color_measurer.py'], 
+                               creationflags=subprocess.CREATE_NEW_CONSOLE)
+            else:
+                subprocess.Popen([sys.executable, 'color_measurer.py'])
+                
+            messagebox.showinfo("Color Measurer", 
+                              f"Color measurer opened in a new window.\n"
+                              f"Use it to measure line colors and copy RGB values to the setup.")
+                              
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open color measurer:\n{str(e)}")
+            
+    def validate_rgb_color(self, color_str):
+        """Validate RGB color format (R,G,B)"""
+        try:
+            parts = color_str.split(',')
+            if len(parts) != 3:
+                raise ValueError("Must have exactly 3 values (R,G,B)")
+            
+            r, g, b = map(int, parts)
+            if not (0 <= r <= 255 and 0 <= g <= 255 and 0 <= b <= 255):
+                raise ValueError("RGB values must be between 0 and 255")
+                
+            return True
+        except ValueError as e:
+            raise ValueError(f"Invalid RGB format: {e}")
+            
+    def get_line_colors(self):
+        """Get the configured line colors"""
+        if not self.use_predefined_colors_var.get():
+            return None
+            
+        try:
+            colors = {
+                'start': self.start_color_var.get(),
+                'A': self.line_a_color_var.get(),
+                'B': self.line_b_color_var.get(),
+                'C': self.line_c_color_var.get(),
+                'D': self.line_d_color_var.get()
+            }
+            
+            # Validate all colors
+            for name, color_str in colors.items():
+                self.validate_rgb_color(color_str)
+                
+            return colors
+            
+        except ValueError as e:
+            messagebox.showerror("Color Error", f"Invalid color format: {e}")
+            return None
+            
     def on_rat_choice_change(self, event):
         if self.controller.current_recommendation is not None:
             is_found = bool((self.rat_choice_var.get() - 1) == self.controller.current_recommendation)
@@ -614,7 +743,19 @@ class KToMExperimenterGUI:
             else:
                 k0_config = None
                 
+            # Validate line colors if using predefined colors
+            line_colors = None
+            if self.use_predefined_colors_var.get():
+                line_colors = self.get_line_colors()
+                if line_colors is None:
+                    return  # Error already shown by get_line_colors
+                
             self.controller.initialize_game(k_level, num_spots, k0_strat, k0_config)
+            
+            # Store line colors in controller
+            if line_colors:
+                self.controller.line_colors = line_colors
+                
             self.run_next_recommendation()
             messagebox.showinfo("Success", "Experiment initialized successfully!")
             
@@ -838,40 +979,58 @@ class KToMExperimenterGUI:
         try:
             import subprocess
             import socket
+            import threading
             
-            # Get robot IP
-            robot_ip = self.robot_ip_var.get()
+            # Run SSH command in a separate thread to prevent GUI blocking
+            def run_ssh_kill():
+                try:
+                    # Get robot IP
+                    robot_ip = self.robot_ip_var.get()
+                    
+                    # Test if we can reach the robot
+                    try:
+                        socket.create_connection((robot_ip, 22), timeout=5)
+                    except:
+                        self.root.after(0, lambda: messagebox.showerror("Connection Error", 
+                            f"Cannot reach robot at {robot_ip} on SSH port 22.\n"
+                            "Please manually kill the hide_and_seek processes on the robot."))
+                        return
+                    
+                    # Kill hide_and_seek processes
+                    ssh_command = f"ssh root@{robot_ip} 'pkill -f hide_and_seek'"
+                    
+                    result = subprocess.run(ssh_command, shell=True, capture_output=True, text=True, timeout=10)
+                    
+                    if result.returncode == 0:
+                        self.root.after(0, lambda: self.update_robot_status("✅ hide_and_seek processes killed on robot"))
+                        self.root.after(0, lambda: messagebox.showinfo("Success", "hide_and_seek processes have been killed on the robot."))
+                    else:
+                        self.root.after(0, lambda: self.update_robot_status(f"⚠️ Failed to kill processes: {result.stderr}"))
+                        self.root.after(0, lambda: messagebox.showwarning("Warning", 
+                            f"Failed to kill processes on robot.\n"
+                            f"Error: {result.stderr}\n\n"
+                            f"Please manually kill the processes on the robot using:\n"
+                            f"ssh root@{robot_ip}\n"
+                            f"pkill -f hide_and_seek"))
+                        
+                except subprocess.TimeoutExpired:
+                    self.root.after(0, lambda: self.update_robot_status("⚠️ SSH command timed out"))
+                    self.root.after(0, lambda: messagebox.showwarning("Timeout", 
+                        "SSH command timed out. Please manually kill the processes on the robot."))
+                except Exception as e:
+                    self.root.after(0, lambda: self.update_robot_status(f"❌ Error killing processes: {str(e)}"))
+                    self.root.after(0, lambda: messagebox.showerror("Error", 
+                        f"Error attempting to kill robot processes:\n{str(e)}\n\n"
+                        "Please manually kill the hide_and_seek processes on the robot."))
             
-            # Test if we can reach the robot
-            try:
-                socket.create_connection((robot_ip, 22), timeout=5)
-            except:
-                messagebox.showerror("Connection Error", 
-                    f"Cannot reach robot at {robot_ip} on SSH port 22.\n"
-                    "Please manually kill the hide_and_seek processes on the robot.")
-                return
-            
-            # Kill hide_and_seek processes
-            ssh_command = f"ssh root@{robot_ip} 'pkill -f hide_and_seek'"
-            
-            result = subprocess.run(ssh_command, shell=True, capture_output=True, text=True)
-            
-            if result.returncode == 0:
-                self.update_robot_status("✅ hide_and_seek processes killed on robot")
-                messagebox.showinfo("Success", "hide_and_seek processes have been killed on the robot.")
-            else:
-                self.update_robot_status(f"⚠️ Failed to kill processes: {result.stderr}")
-                messagebox.showwarning("Warning", 
-                    f"Failed to kill processes on robot.\n"
-                    f"Error: {result.stderr}\n\n"
-                    f"Please manually kill the processes on the robot using:\n"
-                    f"ssh root@{robot_ip}\n"
-                    f"pkill -f hide_and_seek")
+            # Start the SSH thread
+            ssh_thread = threading.Thread(target=run_ssh_kill, daemon=True)
+            ssh_thread.start()
                     
         except Exception as e:
-            self.update_robot_status(f"❌ Error killing processes: {str(e)}")
+            self.update_robot_status(f"❌ Error starting SSH thread: {str(e)}")
             messagebox.showerror("Error", 
-                f"Error attempting to kill robot processes:\n{str(e)}\n\n"
+                f"Error starting SSH thread:\n{str(e)}\n\n"
                 "Please manually kill the hide_and_seek processes on the robot.")
 
     def validate_search_sequence(self, sequence):
