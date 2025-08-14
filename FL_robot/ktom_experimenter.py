@@ -282,6 +282,10 @@ class KToMExperimenterGUI:
         notebook = ttk.Notebook(self.root)
         notebook.pack(fill='both', expand=True, padx=10, pady=10)
         
+        # Bind keyboard shortcuts
+        self.root.bind('<Escape>', lambda e: self.on_abort_mission())
+        self.root.bind('<Control-a>', lambda e: self.on_abort_mission())
+        
         # Setup tab
         setup_frame = ttk.Frame(notebook)
         notebook.add(setup_frame, text="Setup")
@@ -465,6 +469,11 @@ class KToMExperimenterGUI:
                                            foreground='red')
         self.robot_status_label.pack(pady=5)
         
+        # Abort status indicator
+        self.abort_status_label = ttk.Label(connection_frame, text="🚨 ABORT MODE: INACTIVE", 
+                                           foreground='green', font=('Arial', 10, 'bold'))
+        self.abort_status_label.pack(pady=5)
+        
         # Robot Control frame
         control_frame = ttk.LabelFrame(parent, text="Robot Commands", padding=10)
         control_frame.pack(fill='x', padx=10, pady=5)
@@ -536,6 +545,23 @@ class KToMExperimenterGUI:
         self.stop_button = ttk.Button(drive_frame, text="STOP", 
                                      command=self.on_stop_robot, style='Accent.TButton')
         self.stop_button.pack(pady=5)
+        
+        # Emergency Abort button
+        self.abort_button = ttk.Button(drive_frame, text="🚨 ABORT MISSION", 
+                                      command=self.on_abort_mission)
+        self.abort_button.pack(pady=10)
+        
+        # Style the abort button to be more prominent
+        try:
+            style = ttk.Style()
+            style.configure('Emergency.TButton', 
+                          background='red', 
+                          foreground='white',
+                          font=('Arial', 12, 'bold'))
+            self.abort_button.configure(style='Emergency.TButton')
+        except:
+            # Fallback if styling fails
+            pass
         
         # Robot status frame
         status_frame = ttk.LabelFrame(parent, text="Robot Status", padding=10)
@@ -710,6 +736,7 @@ class KToMExperimenterGUI:
                     self.robot_status = "Connected"
                     self.robot_status_label.config(text="Status: Connected", foreground='green')
                     self.connect_button.config(text="Disconnect")
+                    self.abort_status_label.config(text="🚨 ABORT MODE: INACTIVE", foreground='green')
                     self.update_robot_status("Successfully connected to robot")
                 else:
                     self.robot_status = "Connection Failed"
@@ -779,6 +806,73 @@ class KToMExperimenterGUI:
             self.update_robot_status("Sent STOP command")
         else:
             messagebox.showwarning("Warning", "Not connected to robot!")
+            
+    def on_abort_mission(self):
+        """Emergency abort - stop all robot operations and kill hide_and_seek process"""
+        if self.robot_link and self.robot_link.connected:
+            # Update abort status indicator
+            self.abort_status_label.config(text="🚨 ABORT MODE: ACTIVE", foreground='red')
+            
+            # Send emergency stop command
+            self.robot_link.send_cmdvel(0.0, 0.0)
+            self.update_robot_status("🚨 EMERGENCY STOP: Robot halted")
+            
+            # Send abort signal to robot
+            self.robot_link.send_toggle("abort_mission=true")
+            self.update_robot_status("🚨 ABORT MISSION: Signal sent to robot")
+            
+            # Show confirmation dialog
+            result = messagebox.askyesno("ABORT MISSION", 
+                "Emergency stop activated!\n\n"
+                "Robot has been halted and abort signal sent.\n\n"
+                "Do you want to attempt to kill the hide_and_seek process on the robot?\n"
+                "(This will require SSH access to the robot)")
+            
+            if result:
+                self.kill_robot_processes()
+        else:
+            messagebox.showwarning("Warning", "Not connected to robot!")
+            
+    def kill_robot_processes(self):
+        """Attempt to kill hide_and_seek processes on the robot via SSH"""
+        try:
+            import subprocess
+            import socket
+            
+            # Get robot IP
+            robot_ip = self.robot_ip_var.get()
+            
+            # Test if we can reach the robot
+            try:
+                socket.create_connection((robot_ip, 22), timeout=5)
+            except:
+                messagebox.showerror("Connection Error", 
+                    f"Cannot reach robot at {robot_ip} on SSH port 22.\n"
+                    "Please manually kill the hide_and_seek processes on the robot.")
+                return
+            
+            # Kill hide_and_seek processes
+            ssh_command = f"ssh root@{robot_ip} 'pkill -f hide_and_seek'"
+            
+            result = subprocess.run(ssh_command, shell=True, capture_output=True, text=True)
+            
+            if result.returncode == 0:
+                self.update_robot_status("✅ hide_and_seek processes killed on robot")
+                messagebox.showinfo("Success", "hide_and_seek processes have been killed on the robot.")
+            else:
+                self.update_robot_status(f"⚠️ Failed to kill processes: {result.stderr}")
+                messagebox.showwarning("Warning", 
+                    f"Failed to kill processes on robot.\n"
+                    f"Error: {result.stderr}\n\n"
+                    f"Please manually kill the processes on the robot using:\n"
+                    f"ssh root@{robot_ip}\n"
+                    f"pkill -f hide_and_seek")
+                    
+        except Exception as e:
+            self.update_robot_status(f"❌ Error killing processes: {str(e)}")
+            messagebox.showerror("Error", 
+                f"Error attempting to kill robot processes:\n{str(e)}\n\n"
+                "Please manually kill the hide_and_seek processes on the robot.")
 
     def validate_search_sequence(self, sequence):
         """Validate search sequence format (A-D or 1-4, comma-separated)"""

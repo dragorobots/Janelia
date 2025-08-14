@@ -91,6 +91,20 @@ class HideAndSeekBridge(Node):
             found_msg = Bool()
             found_msg.data = True
             self.rat_detection_pub.publish(found_msg)
+            
+        elif toggle_str == "abort_mission=true":
+            self.get_logger().info("🚨 ABORT MISSION signal received!")
+            
+            # Stop robot immediately
+            stop_msg = Twist()
+            self.cmd_vel_robot_pub.publish(stop_msg)
+            
+            # Publish abort status
+            progress_msg = String()
+            progress_msg.data = "abort_mission_activated"
+            self.progress_pub.publish(progress_msg)
+            
+            self.get_logger().info("🚨 Robot halted due to abort mission signal")
 
     def cmd_vel_callback(self, msg):
         """Handle velocity commands from PC"""

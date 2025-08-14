@@ -104,6 +104,15 @@ python ktom_experimenter.py
 4. Configure experiment parameters in "Setup" tab
 5. Run trials and monitor results
 
+### Emergency Abort Functionality
+- **🚨 ABORT MISSION Button**: Located in Robot Control tab
+- **Keyboard Shortcuts**: Press `Escape` or `Ctrl+A` for emergency stop
+- **E-Stop Features**:
+  - Immediately halts robot movement
+  - Sends abort signal to robot
+  - Option to kill hide_and_seek processes via SSH
+  - Visual status indicator shows abort mode
+
 ## 📊 Experiment Workflow
 
 ### 1. Setup Phase
