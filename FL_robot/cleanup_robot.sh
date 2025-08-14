@@ -2,35 +2,54 @@
 
 echo "🧹 Cleaning up robot processes..."
 
-# Kill any processes using port 10090
+# Use netstat instead of lsof (more commonly available)
 echo "Stopping processes on port 10090..."
-sudo lsof -ti:10090 | xargs -r sudo kill -9
+
+# Find processes using port 10090 with netstat
+PIDS=$(netstat -tlnp 2>/dev/null | grep :10090 | awk '{print $7}' | cut -d'/' -f1 | grep -v -)
+
+if [ ! -z "$PIDS" ]; then
+    echo "Found processes using port 10090: $PIDS"
+    for pid in $PIDS; do
+        if [ ! -z "$pid" ] && [ "$pid" != "-" ]; then
+            echo "Killing process $pid"
+            kill -9 $pid 2>/dev/null
+        fi
+    done
+else
+    echo "No processes found using port 10090"
+fi
 
 # Kill Python processes (be more specific to avoid killing other scripts)
 echo "Stopping Python robot processes..."
-sudo pkill -f "hide_and_seek"
-sudo pkill -f "rosbridge"
+pkill -f "hide_and_seek" 2>/dev/null
+pkill -f "rosbridge" 2>/dev/null
 
 # Kill ROS2 processes
 echo "Stopping ROS2 processes..."
-sudo pkill -f "ros2"
+pkill -f "ros2" 2>/dev/null
 
 # Wait a moment for processes to fully terminate
-sleep 2
+sleep 3
 
-# Check if port is free
-if sudo lsof -i :10090 > /dev/null 2>&1; then
+# Check if port is free using netstat
+if netstat -tlnp 2>/dev/null | grep :10090 > /dev/null; then
     echo "⚠️  Port 10090 is still in use. Force killing..."
-    sudo lsof -ti:10090 | xargs -r sudo kill -9
+    PIDS=$(netstat -tlnp 2>/dev/null | grep :10090 | awk '{print $7}' | cut -d'/' -f1 | grep -v -)
+    for pid in $PIDS; do
+        if [ ! -z "$pid" ] && [ "$pid" != "-" ]; then
+            kill -9 $pid 2>/dev/null
+        fi
+    done
     sleep 1
 fi
 
 # Verify cleanup
-if ! sudo lsof -i :10090 > /dev/null 2>&1; then
+if ! netstat -tlnp 2>/dev/null | grep :10090 > /dev/null; then
     echo "✅ Port 10090 is now free"
 else
     echo "❌ Port 10090 is still in use"
-    sudo lsof -i :10090
+    netstat -tlnp | grep :10090
 fi
 
 echo "🧹 Cleanup complete!"
