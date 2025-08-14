@@ -131,7 +131,11 @@ class HideAndSeekNode(Node):
         self.box_end_point = (0, 0)
 
         # --- Manual Control ---
-        self.settings = termios.tcgetattr(sys.stdin)
+        try:
+            self.settings = termios.tcgetattr(sys.stdin)
+        except (termios.error, OSError):
+            # Handle non-interactive environments (like when running as ROS2 node)
+            self.settings = None
         self.manual_speed = 0.2
         self.manual_turn = 1.0
         
@@ -203,14 +207,21 @@ class HideAndSeekNode(Node):
                 self.get_logger().error(f"Invalid PC hue value: {color_str}")
 
     def getKey(self):
-        tty.setraw(sys.stdin.fileno())
-        rlist, _, _ = select.select([sys.stdin], [], [], 0.1)
-        if rlist:
-            key = sys.stdin.read(1)
-        else:
-            key = ''
-        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.settings)
-        return key
+        if self.settings is None:
+            # Non-interactive environment, return empty key
+            return ''
+        try:
+            tty.setraw(sys.stdin.fileno())
+            rlist, _, _ = select.select([sys.stdin], [], [], 0.1)
+            if rlist:
+                key = sys.stdin.read(1)
+            else:
+                key = ''
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.settings)
+            return key
+        except (termios.error, OSError):
+            # Handle any terminal errors gracefully
+            return ''
 
     def main_loop(self):
         ret, frame = self.capture.read()
