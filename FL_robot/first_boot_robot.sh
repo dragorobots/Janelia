@@ -133,11 +133,11 @@ echo "📦 Installing Python packages..."
 
 # Core scientific computing
 echo "   Installing numpy and scipy..."
-pip3 install "numpy>=1.25.2" "scipy>=1.16.0"
+pip3 install "numpy>=1.21.0" "scipy>=1.7.0"
 
 # Camera and image processing
 echo "   Installing camera and image processing packages..."
-pip3 install "opencv-python>=4.8.0"
+pip3 install "opencv-python>=4.5.0"
 
 # Web server for camera streaming
 echo "   Installing web server packages..."

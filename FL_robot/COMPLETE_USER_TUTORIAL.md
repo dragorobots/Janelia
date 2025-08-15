@@ -442,6 +442,28 @@ Each trial records:
     ./first_boot_robot.sh
     ```
 
+#### **"Git conflicts when updating robot"**
+- If you see "Your local changes would be overwritten by merge":
+  - The robot has local changes that conflict with the updated code
+  - **Option 1 (Recommended)**: Reset to get the latest version:
+    ```bash
+    cd /root/yahboomcar_ws/src/Janelia
+    git reset --hard origin/main
+    git pull
+    ```
+  - **Option 2**: Stash changes and then pull:
+    ```bash
+    cd /root/yahboomcar_ws/src/Janelia
+    git stash
+    git pull
+    ```
+  - **Option 3**: If the repository already exists, remove and re-clone:
+    ```bash
+    cd /root/yahboomcar_ws/src
+    rm -rf Janelia
+    git clone https://github.com/dragorobots/Janelia.git
+    ```
+
 ### **Emergency Stop**
 
 **If the robot is moving unexpectedly:**

@@ -1,6 +1,6 @@
 # Core scientific computing
-numpy>=1.25.2
-scipy>=1.16.0
+numpy>=1.21.0
+scipy>=1.7.0
 
 # GUI framework
 tkinter  # Built into Python
@@ -10,10 +10,10 @@ rosbridge-suite>=0.11.13
 roslibpy>=1.8.0
 
 # Optional: For enhanced GUI features
-pillow>=10.0.0  # For image processing in GUI
+pillow>=8.0.0  # For image processing in GUI
 
 # Color measurement tool
-opencv-python>=4.8.0  # For camera feed and color analysis
+opencv-python>=4.5.0  # For camera feed and color analysis
 
 # Camera server
 flask>=2.0.0  # For camera server web interface
