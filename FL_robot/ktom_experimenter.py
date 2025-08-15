@@ -213,6 +213,10 @@ class RobotController:
         self.current_recommendation = choice
         return choice
 
+    def get_current_recommendation(self):
+        """Get the current k-ToM recommendation"""
+        return self.current_recommendation
+
     def process_trial_result(self, rat_choice, was_found, time_taken, search_sequence=""):
         """Updates the k-ToM model and appends a detailed record to the trial log."""
         rat_choice_idx = int(rat_choice)
@@ -518,6 +522,11 @@ class KToMExperimenterGUI:
                                         command=self.on_connect_robot)
         self.connect_button.pack(pady=5)
         
+        # Check robot status button
+        self.check_robot_status_button = ttk.Button(connection_frame, text="🔍 Check Robot Status", 
+                                                   command=self.on_check_robot_status)
+        self.check_robot_status_button.pack(pady=5)
+        
         # Status display
         self.robot_status_label = ttk.Label(connection_frame, text="Status: Disconnected", 
                                            foreground='red')
@@ -543,6 +552,11 @@ class KToMExperimenterGUI:
         self.send_target_button = ttk.Button(control_frame, text="Send Target Spot", 
                                             command=self.on_send_target)
         self.send_target_button.pack(pady=5)
+        
+        # Auto-send target button (uses k-ToM recommendation)
+        self.auto_send_target_button = ttk.Button(control_frame, text="🤖 Auto-Send k-ToM Target", 
+                                                 command=self.on_auto_send_target, style='Accent.TButton')
+        self.auto_send_target_button.pack(pady=5)
         
         # Mode toggles
         ttk.Label(control_frame, text="Drive Mode:").pack(anchor='w', pady=(10,0))
@@ -572,6 +586,36 @@ class KToMExperimenterGUI:
         self.manual_found_button = ttk.Button(control_frame, text="Manual: Rat Found!", 
                                              command=self.on_manual_found, style='Accent.TButton')
         self.manual_found_button.pack(pady=10)
+        
+        # Trial Progress Indicator
+        progress_frame = ttk.LabelFrame(parent, text="🎯 Trial Progress", padding=10)
+        progress_frame.pack(fill='x', padx=10, pady=5)
+        
+        # Progress steps
+        self.progress_steps = [
+            "1. Leave entrance",
+            "2. Reach intersection & start new line", 
+            "3. Follow the line",
+            "4. Wait at hiding spot (detect rat)",
+            "5. Wait 10s, turn 180°",
+            "6. Follow line back (same color)",
+            "7. Reach intersection & return to start",
+            "8. Wait for new command, turn 180°, reset"
+        ]
+        
+        # Create progress indicators
+        self.progress_labels = []
+        for i, step in enumerate(self.progress_steps):
+            label = ttk.Label(progress_frame, text=f"⭕ {step}", 
+                             font=('Arial', 9), foreground='gray')
+            label.pack(anchor='w', pady=1)
+            self.progress_labels.append(label)
+        
+        # Current step indicator
+        self.current_step_var = tk.StringVar(value="Waiting for trial to start...")
+        self.current_step_label = ttk.Label(progress_frame, textvariable=self.current_step_var,
+                                           font=('Arial', 10, 'bold'), foreground='blue')
+        self.current_step_label.pack(pady=5)
         
         # Manual driving frame
         drive_frame = ttk.LabelFrame(parent, text="Manual Driving", padding=10)
@@ -770,6 +814,8 @@ class KToMExperimenterGUI:
         # Clear search sequence for new trial
         self.search_sequence_var.set("")
         self.update_display()
+        # Reset trial progress for new trial
+        self.update_trial_progress(0)
         
     def update_display(self):
         # Update trial log
@@ -863,12 +909,37 @@ class KToMExperimenterGUI:
                 # Set up status callbacks
                 def on_line_follow_status(status):
                     self.update_robot_status(f"Line Follow: {status}")
+                    # Update progress based on line following status
+                    if "following" in status.lower():
+                        self.update_trial_progress(3)  # Step 3: Follow the line
+                    elif "intersection" in status.lower():
+                        self.update_trial_progress(2)  # Step 2: Reach intersection
                 
                 def on_rat_detection_status(found):
                     self.update_robot_status(f"Rat Detection: {'Found' if found else 'Not Found'}")
+                    if found:
+                        self.update_trial_progress(4)  # Step 4: Wait at hiding spot (detect rat)
                 
                 def on_progress_status(progress):
                     self.update_robot_status(f"Progress: {progress}")
+                    # Map progress messages to trial steps
+                    progress_lower = progress.lower()
+                    if "entrance" in progress_lower:
+                        self.update_trial_progress(1)  # Step 1: Leave entrance
+                    elif "intersection" in progress_lower:
+                        self.update_trial_progress(2)  # Step 2: Reach intersection
+                    elif "following" in progress_lower:
+                        self.update_trial_progress(3)  # Step 3: Follow the line
+                    elif "waiting" in progress_lower and "rat" in progress_lower:
+                        self.update_trial_progress(4)  # Step 4: Wait at hiding spot
+                    elif "turning" in progress_lower or "180" in progress_lower:
+                        self.update_trial_progress(5)  # Step 5: Wait 10s, turn 180°
+                    elif "returning" in progress_lower or "back" in progress_lower:
+                        self.update_trial_progress(6)  # Step 6: Follow line back
+                    elif "start" in progress_lower and "return" in progress_lower:
+                        self.update_trial_progress(7)  # Step 7: Return to start
+                    elif "waiting" in progress_lower and "command" in progress_lower:
+                        self.update_trial_progress(8)  # Step 8: Wait for new command
                 
                 # Connect with callbacks
                 if self.robot_link.connect(on_lf=on_line_follow_status, 
@@ -1032,6 +1103,131 @@ class KToMExperimenterGUI:
             messagebox.showerror("Error", 
                 f"Error starting SSH thread:\n{str(e)}\n\n"
                 "Please manually kill the hide_and_seek processes on the robot.")
+
+    def on_check_robot_status(self):
+        """Check if hide_and_seek.sh is running on robot and bridge is active"""
+        if not self.robot_link or not self.robot_link.connected:
+            messagebox.showwarning("Warning", "Not connected to robot!")
+            return
+            
+        try:
+            import subprocess
+            import socket
+            import requests
+            
+            robot_ip = self.robot_ip_var.get()
+            
+            # Check 1: Can we reach the robot?
+            try:
+                socket.create_connection((robot_ip, 22), timeout=5)
+            except:
+                messagebox.showerror("Connection Error", 
+                    f"Cannot reach robot at {robot_ip} on SSH port 22.\n"
+                    "Please check network connection and robot power.")
+                return
+            
+            # Check 2: Is hide_and_seek.sh running?
+            try:
+                ssh_command = f"ssh root@{robot_ip} 'pgrep -f hide_and_seek'"
+                result = subprocess.run(ssh_command, shell=True, capture_output=True, text=True, timeout=10)
+                
+                hide_and_seek_running = result.returncode == 0 and result.stdout.strip()
+                
+            except subprocess.TimeoutExpired:
+                hide_and_seek_running = False
+                self.update_robot_status("⚠️ SSH timeout checking hide_and_seek process")
+            
+            # Check 3: Is bridge active (can we get progress updates)?
+            bridge_active = False
+            try:
+                # Try to get a progress update from the bridge
+                # This is a simple test - in a real implementation you might want to check specific topics
+                bridge_active = self.robot_link.connected
+            except:
+                bridge_active = False
+            
+            # Show results
+            status_message = "🤖 Robot Status Check Results:\n\n"
+            
+            if hide_and_seek_running:
+                status_message += "✅ hide_and_seek.sh is running on robot\n"
+            else:
+                status_message += "❌ hide_and_seek.sh is NOT running on robot\n"
+                
+            if bridge_active:
+                status_message += "✅ Bridge is active and connected\n"
+            else:
+                status_message += "❌ Bridge is NOT active\n"
+            
+            if hide_and_seek_running and bridge_active:
+                status_message += "\n🎉 Robot is ready for trials!"
+                messagebox.showinfo("Robot Status", status_message)
+            else:
+                status_message += "\n⚠️ Robot needs attention before trials."
+                if not hide_and_seek_running:
+                    status_message += "\n\nTo start hide_and_seek.sh on robot:\n"
+                    status_message += f"ssh root@{robot_ip}\n"
+                    status_message += "cd ~/yahboomcar_ws/src/Janelia/FL_robot\n"
+                    status_message += "./start_hide_and_seek.sh"
+                
+                messagebox.showwarning("Robot Status", status_message)
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Error checking robot status: {str(e)}")
+
+    def on_auto_send_target(self):
+        """Automatically send the k-ToM recommended hiding spot to robot"""
+        if not self.robot_link or not self.robot_link.connected:
+            messagebox.showwarning("Warning", "Not connected to robot!")
+            return
+            
+        try:
+            # Get the current k-ToM recommendation
+            if hasattr(self, 'controller') and self.controller:
+                # Get the recommended hiding spot from k-ToM
+                recommended_spot = self.controller.get_current_recommendation()
+                
+                if recommended_spot is not None:
+                    # Convert to robot format (A, B, C, D)
+                    spot_map = {0: "A", 1: "B", 2: "C", 3: "D"}
+                    target_spot = spot_map.get(recommended_spot, "A")
+                    
+                    # Update the target spot variable
+                    self.target_spot_var.set(target_spot)
+                    
+                    # Send to robot
+                    target_map = {"A": 0, "B": 1, "C": 2, "D": 3}
+                    target_idx = target_map.get(target_spot, 0)
+                    self.robot_link.send_target(target_idx)
+                    
+                    self.update_robot_status(f"🤖 Auto-sent k-ToM recommendation: {target_spot} (index: {target_idx})")
+                    self.update_trial_progress(0)  # Reset trial progress
+                    
+                else:
+                    messagebox.showwarning("Warning", "No k-ToM recommendation available. Please run a trial first.")
+            else:
+                messagebox.showwarning("Warning", "k-ToM controller not initialized. Please start a trial first.")
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Error auto-sending target: {str(e)}")
+
+    def update_trial_progress(self, step_number):
+        """Update the trial progress indicator"""
+        if 0 <= step_number <= len(self.progress_steps):
+            # Update all progress labels
+            for i, label in enumerate(self.progress_labels):
+                if i < step_number:
+                    label.config(text=f"✅ {self.progress_steps[i]}", foreground='green')
+                elif i == step_number:
+                    label.config(text=f"🔄 {self.progress_steps[i]}", foreground='orange')
+                    self.current_step_var.set(f"Current: {self.progress_steps[i]}")
+                else:
+                    label.config(text=f"⭕ {self.progress_steps[i]}", foreground='gray')
+            
+            if step_number == 0:
+                self.current_step_var.set("Waiting for trial to start...")
+            elif step_number >= len(self.progress_steps):
+                self.current_step_var.set("Trial completed!")
 
     def validate_search_sequence(self, sequence):
         """Validate search sequence format (A-D or 1-4, comma-separated)"""

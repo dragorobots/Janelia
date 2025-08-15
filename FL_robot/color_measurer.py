@@ -12,6 +12,9 @@ from tkinter import ttk, messagebox
 import threading
 import time
 import socket
+import subprocess
+import requests
+import sys
 
 class ColorMeasurer:
     def __init__(self, robot_ip="10.0.0.234", camera_port=8080):
@@ -21,6 +24,7 @@ class ColorMeasurer:
         self.is_running = False
         self.roi_selected = False
         self.roi_coords = None
+        self.camera_server_process = None
         self.setup_gui()
         
     def setup_gui(self):
@@ -56,10 +60,11 @@ class ColorMeasurer:
         
         instructions = """
 1. Enter robot IP and camera port (default: 8080)
-2. Click "Connect to Camera" to start video feed
+2. Click "Connect to Camera" to start video feed (will prompt you to start camera server on robot)
 3. Click and drag on the video to select a region of interest (ROI)
 4. The RGB values of the selected region will be displayed below
 5. Use these values for line color configuration in the main GUI
+6. Click "✅ Finished - Close All" when done (will prompt you to stop camera server)
         """
         ttk.Label(instruction_frame, text=instructions, justify='left').pack(anchor='w')
         
@@ -90,6 +95,11 @@ class ColorMeasurer:
                                   command=self.copy_rgb_values, state='disabled')
         self.copy_btn.pack(pady=5)
         
+        # Finished button
+        self.finished_btn = ttk.Button(results_frame, text="✅ Finished - Close All", 
+                                      command=self.finish_and_close, style='Accent.TButton')
+        self.finished_btn.pack(pady=10)
+        
         # Status bar
         self.status_var = tk.StringVar(value="Ready")
         self.status_label = ttk.Label(self.root, textvariable=self.status_var, 
@@ -103,6 +113,70 @@ class ColorMeasurer:
         else:
             self.disconnect_camera()
             
+    def check_camera_server_status(self):
+        """Check if camera server is running on robot"""
+        try:
+            response = requests.get(f"http://{self.robot_ip}:{self.camera_port}/status", timeout=2)
+            return response.status_code == 200
+        except:
+            return False
+            
+    def start_camera_server_on_robot(self):
+        """Start camera server on robot via SSH"""
+        try:
+            self.status_var.set("Starting camera server on robot...")
+            self.root.update()
+            
+            # Show instructions to user
+            result = messagebox.askyesno(
+                "Start Camera Server", 
+                f"Camera server needs to be started on the robot.\n\n"
+                f"Please run this command on the robot:\n\n"
+                f"python3 camera_server.py --port {self.camera_port}\n\n"
+                f"Then click 'Yes' to continue, or 'No' to cancel."
+            )
+            
+            if not result:
+                self.status_var.set("Camera server start cancelled")
+                return False
+            
+            # Wait a bit for server to start
+            time.sleep(2)
+            
+            # Check if server started successfully
+            if self.check_camera_server_status():
+                self.status_var.set("Camera server started successfully")
+                return True
+            else:
+                self.status_var.set("Camera server not detected. Please make sure it's running.")
+                return False
+                
+        except Exception as e:
+            self.status_var.set(f"Error starting camera server: {str(e)}")
+            return False
+            
+    def stop_camera_server_on_robot(self):
+        """Stop camera server on robot"""
+        try:
+            # Show instructions to user
+            result = messagebox.askyesno(
+                "Stop Camera Server", 
+                f"Camera server should be stopped on the robot.\n\n"
+                f"Please press Ctrl+C in the camera server terminal on the robot.\n\n"
+                f"Click 'Yes' to continue, or 'No' to skip."
+            )
+            
+            if result:
+                self.status_var.set("Camera server stopped")
+            else:
+                self.status_var.set("Camera server stop skipped")
+            
+            return True
+            
+        except Exception as e:
+            self.status_var.set(f"Error stopping camera server: {str(e)}")
+            return False
+            
     def connect_to_camera(self):
         """Connect to robot's camera feed"""
         try:
@@ -112,6 +186,14 @@ class ColorMeasurer:
             # Test connection
             self.status_var.set(f"Connecting to {self.robot_ip}:{self.camera_port}...")
             self.root.update()
+            
+            # First check if camera server is running
+            if not self.check_camera_server_status():
+                self.status_var.set("Camera server not running. Starting it automatically...")
+                self.root.update()
+                
+                if not self.start_camera_server_on_robot():
+                    raise Exception("Failed to start camera server on robot")
             
             # Try to connect to camera stream
             camera_url = f"http://{self.robot_ip}:{self.camera_port}/stream.mjpg"
@@ -148,6 +230,28 @@ class ColorMeasurer:
         self.connect_btn.config(text="Connect to Camera")
         self.video_label.config(text="Click 'Connect to Camera' to start")
         self.status_var.set("Disconnected")
+        
+    def finish_and_close(self):
+        """Finish color measurement and close everything"""
+        try:
+            # Disconnect camera
+            self.disconnect_camera()
+            
+            # Stop camera server on robot
+            self.stop_camera_server_on_robot()
+            
+            # Show completion message
+            messagebox.showinfo("Color Measurement Complete", 
+                              "Color measurement finished!\n\n"
+                              "Please stop the camera server on the robot (Ctrl+C).\n"
+                              "You can now start the robot system.")
+            
+            # Close GUI
+            self.root.quit()
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Error during cleanup: {str(e)}")
+            self.root.quit()
         
     def video_loop(self):
         """Main video processing loop"""

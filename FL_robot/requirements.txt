@@ -17,3 +17,4 @@ opencv-python>=4.8.0  # For camera feed and color analysis
 
 # Camera server
 flask>=2.0.0  # For camera server web interface
+requests>=2.25.0  # For HTTP requests to camera server
