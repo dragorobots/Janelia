@@ -697,9 +697,13 @@ class KToMExperimenterGUI:
         
         # === RIGHT PANEL: INSTRUCTIONS & PROGRESS ===
         
-        # Trial Instructions frame
-        instructions_frame = ttk.LabelFrame(right_panel, text="📋 Trial Instructions", padding=10)
-        instructions_frame.pack(fill='x', pady=5)
+        # Create a horizontal container for instructions and progress
+        instructions_progress_container = ttk.Frame(right_panel)
+        instructions_progress_container.pack(fill='x', pady=5)
+        
+        # Trial Instructions frame (left side)
+        instructions_frame = ttk.LabelFrame(instructions_progress_container, text="📋 Trial Instructions", padding=10)
+        instructions_frame.pack(side='left', fill='both', expand=True, padx=(0, 5))
         
         # Instructions text
         instructions_text = """
@@ -726,26 +730,15 @@ Step-by-Step Process:
 
 5) Start trial when ready
    • Click the big green START TRIAL button below
-
-🎯 Robot Trial Progress:
-   The robot will automatically progress through these steps:
-   • Step 1: Leave entrance (line following)
-   • Step 2: Reach intersection & start new line
-   • Step 3: Follow the line to hiding spot
-   • Step 4: Wait at hiding spot (detect rat)
-   • Step 5: Wait 10s, turn 180°
-   • Step 6: Follow line back (same color)
-   • Step 7: Reach intersection & return to start
-   • Step 8: Wait for new command, turn 180°, reset
         """
         
         instructions_label = ttk.Label(instructions_frame, text=instructions_text, 
-                                      font=('Arial', 9), justify='left', wraplength=300)
+                                      font=('Arial', 9), justify='left', wraplength=250)
         instructions_label.pack(anchor='w', pady=5)
         
-        # Trial Progress frame (static checkbox list only)
-        progress_frame = ttk.LabelFrame(right_panel, text="🎯 Trial Progress", padding=10)
-        progress_frame.pack(fill='x', pady=5)
+        # Trial Progress frame (right side)
+        progress_frame = ttk.LabelFrame(instructions_progress_container, text="🎯 Trial Progress", padding=10)
+        progress_frame.pack(side='right', fill='y', padx=(5, 0))
         
         # Progress steps with checkboxes
         self.progress_steps = [
@@ -1421,7 +1414,11 @@ Step-by-Step Process:
         if 0 <= step_number <= len(self.progress_steps):
             # Update all progress checkboxes and labels
             for i, (var, label) in enumerate(zip(self.progress_vars, self.progress_labels)):
-                if i < step_number:
+                if step_number == 0:
+                    # Reset state - all steps gray and unchecked
+                    var.set(False)
+                    label.config(foreground='gray')
+                elif i < step_number:
                     # Completed steps
                     var.set(True)
                     label.config(foreground='green')

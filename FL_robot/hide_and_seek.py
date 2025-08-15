@@ -289,7 +289,7 @@ class HideAndSeekNode(Node):
             line_status_msg.data = "manual_drive_mode"
         elif self.pc_drive_mode == "manual_line":
             line_status_msg.data = "manual_line_mode"
-        elif self.main_state == RobotState.FOLLOWING_LINE:
+        elif self.main_state in [RobotState.FOLLOWING_START_LINE, RobotState.FOLLOWING_TARGET_LINE]:
             if self.follow_state == FollowState.TRACKING:
                 line_status_msg.data = "following"
             elif self.follow_state == FollowState.SEARCHING:
