@@ -96,7 +96,8 @@ class HideAndSeekNode(Node):
         # --- Parameters ---
         self.linear_speed = 0.12
         self.pid_controller = simplePID(p=[0.03, 0], i=[0.0, 0], d=[0.03, 0])
-        self.min_radius_threshold = 40
+        self.min_radius_threshold = 80  # Increased to filter out noise
+        self.min_line_area = 1000  # Minimum area for a valid line segment
         self.camera_offset = 0
         self.img_flip = True
         self.REVERSE_SPEED = -0.1
@@ -443,25 +444,56 @@ class HideAndSeekNode(Node):
             self.get_logger().error(f"Invalid HSV range format: {self.target_hsv_range}")
             return None
         
-        kernel = np.ones((5, 5), np.uint8)
-        mask = cv2.erode(mask, kernel, iterations=1)
-        mask = cv2.dilate(mask, kernel, iterations=1)
-
-        # Calculate line center and radius
-        M = cv2.moments(mask)
-        radius = int(math.sqrt(M["m00"] / math.pi)) if M["m00"] > 0 else 0
-
-        # Add debugging information to frame
-        cv2.putText(frame, f"Line Radius: {radius} (min: {self.min_radius_threshold})", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-        cv2.putText(frame, f"State: {self.follow_state}", (50, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        # Enhanced noise filtering
+        # 1. Remove small noise with larger morphological operations
+        kernel = np.ones((7, 7), np.uint8)  # Larger kernel to remove more noise
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)  # Remove small noise
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)  # Fill small holes
         
-        # Show mask for debugging
+        # 2. Find contours to filter by shape and area
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        # 3. Filter contours by area and find the largest valid contour
+        valid_contours = []
+        for contour in contours:
+            area = cv2.contourArea(contour)
+            if area > self.min_line_area:
+                valid_contours.append(contour)
+        
+        # 4. Create a clean mask with only valid contours
+        clean_mask = np.zeros_like(mask)
+        if valid_contours:
+            # Find the largest contour (most likely the main line)
+            largest_contour = max(valid_contours, key=cv2.contourArea)
+            cv2.fillPoly(clean_mask, [largest_contour], 255)
+        
+        # 5. Calculate moments from the clean mask
+        M = cv2.moments(clean_mask)
+        radius = int(math.sqrt(M["m00"] / math.pi)) if M["m00"] > 0 else 0
+        area = M["m00"] if M["m00"] > 0 else 0
+
+        # Add enhanced debugging information to frame
+        cv2.putText(frame, f"Line Radius: {radius} (min: {self.min_radius_threshold})", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        cv2.putText(frame, f"Line Area: {area:.0f} (min: {self.min_line_area})", (50, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        cv2.putText(frame, f"Valid Contours: {len(valid_contours)}", (50, 110), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        cv2.putText(frame, f"State: {self.follow_state}", (50, 140), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        
+        # Show both original and clean masks for debugging
         mask_display = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
+        clean_mask_display = cv2.cvtColor(clean_mask, cv2.COLOR_GRAY2BGR)
+        # Draw contours on clean mask display
+        if valid_contours:
+            cv2.drawContours(clean_mask_display, valid_contours, -1, (0, 255, 0), 2)
+        
+        # Combine masks side by side
         mask_display = cv2.resize(mask_display, (320, 240))
+        clean_mask_display = cv2.resize(clean_mask_display, (320, 240))
+        mask_display = cv2.hconcat([mask_display, clean_mask_display])
 
         twist = Twist()
         if self.follow_state == FollowState.TRACKING:
-            if radius > self.min_radius_threshold:
+            # Check both radius and area for robust line detection
+            if radius > self.min_radius_threshold and area > self.min_line_area:
                 cx = int(M["m10"] / M["m00"])
                 cy = int(M["m01"] / M["m00"])
                 error = cx - (frame.shape[1] // 2 + self.camera_offset)
@@ -470,9 +502,9 @@ class HideAndSeekNode(Node):
                 twist.angular.z = float(z_pid)
                 self.cmd_vel_pub.publish(twist)
                 cv2.circle(frame, (cx, cy), 10, (255, 0, 255), -1)
-                cv2.putText(frame, f"Following: cx={cx}, error={error:.1f}, z={z_pid:.3f}", (50, 110), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                cv2.putText(frame, f"Following: cx={cx}, error={error:.1f}, z={z_pid:.3f}", (50, 170), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
             else:
-                self.get_logger().info(f"Line lost (radius: {radius} < {self.min_radius_threshold}), reversing...")
+                self.get_logger().info(f"Line lost (radius: {radius} < {self.min_radius_threshold} or area: {area:.0f} < {self.min_line_area}), reversing...")
                 self.follow_state = FollowState.REVERSING
                 self.action_start_time = time.time()
                 self.stop_robot()
@@ -488,7 +520,7 @@ class HideAndSeekNode(Node):
                 self.stop_robot()
 
         elif self.follow_state == FollowState.SEARCHING:
-            if radius > self.min_radius_threshold:
+            if radius > self.min_radius_threshold and area > self.min_line_area:
                 self.get_logger().info("Line reacquired!")
                 self.follow_state = FollowState.TRACKING
                 self.stop_robot()
@@ -518,7 +550,7 @@ class HideAndSeekNode(Node):
         elif self.follow_state == FollowState.STOPPED:
             self.stop_robot()
 
-        return cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
+        return mask_display
 
     def execute_wait_for_rat(self, frame):
         if self.action_start_time is None:
