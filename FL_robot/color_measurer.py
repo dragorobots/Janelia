@@ -31,11 +31,19 @@ class ColorMeasurer:
         """Setup the GUI for color measurement"""
         self.root = tk.Tk()
         self.root.title("Robot Color Measurer")
-        self.root.geometry("800x600")
+        self.root.geometry("1000x700")
+        
+        # Create main container with left and right panels
+        main_container = ttk.Frame(self.root)
+        main_container.pack(fill='both', expand=True, padx=10, pady=5)
+        
+        # === LEFT PANEL: Camera Feed and Controls ===
+        left_panel = ttk.Frame(main_container)
+        left_panel.pack(side='left', fill='both', expand=True, padx=(0, 10))
         
         # Control frame
-        control_frame = ttk.LabelFrame(self.root, text="Controls", padding=10)
-        control_frame.pack(fill='x', padx=10, pady=5)
+        control_frame = ttk.LabelFrame(left_panel, text="Connection Settings", padding=10)
+        control_frame.pack(fill='x', pady=5)
         
         # Robot IP input
         ttk.Label(control_frame, text="Robot IP:").pack(side='left', padx=(0,5))
@@ -55,50 +63,54 @@ class ColorMeasurer:
         self.connect_btn.pack(side='left', padx=(0,10))
         
         # Instructions
-        instruction_frame = ttk.LabelFrame(self.root, text="Instructions", padding=10)
-        instruction_frame.pack(fill='x', padx=10, pady=5)
+        instruction_frame = ttk.LabelFrame(left_panel, text="Instructions", padding=10)
+        instruction_frame.pack(fill='x', pady=5)
         
         instructions = """
 1. Enter robot IP and camera port (default: 8080)
-2. Click "Connect to Camera" to start video feed (will prompt you to start camera server on robot)
+2. Click "Connect to Camera" to start video feed
 3. Click and drag on the video to select a region of interest (ROI)
-4. The RGB values of the selected region will be displayed below
-5. Use these values for line color configuration in the main GUI
-6. Click "✅ Finished - Close All" when done (will prompt you to stop camera server)
+4. The RGB values will be displayed in the right panel
+5. Use "Copy RGB Values" to copy to clipboard
+6. Click "✅ Finished - Close All" when done
         """
         ttk.Label(instruction_frame, text=instructions, justify='left').pack(anchor='w')
         
         # Video frame
-        video_frame = ttk.LabelFrame(self.root, text="Camera Feed", padding=10)
-        video_frame.pack(fill='both', expand=True, padx=10, pady=5)
+        video_frame = ttk.LabelFrame(left_panel, text="Camera Feed", padding=10)
+        video_frame.pack(fill='both', expand=True, pady=5)
         
         # Video display (placeholder)
         self.video_label = ttk.Label(video_frame, text="Click 'Connect to Camera' to start")
         self.video_label.pack(expand=True)
         
+        # === RIGHT PANEL: Color Results and Controls ===
+        right_panel = ttk.Frame(main_container)
+        right_panel.pack(side='right', fill='y', padx=(10, 0))
+        
         # Results frame
-        results_frame = ttk.LabelFrame(self.root, text="Color Results", padding=10)
-        results_frame.pack(fill='x', padx=10, pady=5)
+        results_frame = ttk.LabelFrame(right_panel, text="Color Results", padding=10)
+        results_frame.pack(fill='x', pady=5)
         
         # RGB values display
         self.rgb_label = ttk.Label(results_frame, text="RGB: No region selected", 
                                   font=('Arial', 12, 'bold'))
-        self.rgb_label.pack()
+        self.rgb_label.pack(pady=5)
         
         # HSV values display
         self.hsv_label = ttk.Label(results_frame, text="HSV: No region selected", 
                                   font=('Arial', 12, 'bold'))
-        self.hsv_label.pack()
+        self.hsv_label.pack(pady=5)
         
         # Copy button
-        self.copy_btn = ttk.Button(results_frame, text="Copy RGB Values", 
+        self.copy_btn = ttk.Button(results_frame, text="📋 Copy RGB Values", 
                                   command=self.copy_rgb_values, state='disabled')
-        self.copy_btn.pack(pady=5)
+        self.copy_btn.pack(pady=10, fill='x')
         
         # Finished button
         self.finished_btn = ttk.Button(results_frame, text="✅ Finished - Close All", 
                                       command=self.finish_and_close, style='Accent.TButton')
-        self.finished_btn.pack(pady=10)
+        self.finished_btn.pack(pady=10, fill='x')
         
         # Status bar
         self.status_var = tk.StringVar(value="Ready")
