@@ -1424,7 +1424,7 @@ Step-by-Step Process:
                     label.config(foreground='green')
                 elif i == step_number:
                     # Current step
-                    var.set(False)
+                    var.set(True)
                     label.config(foreground='orange')
                 else:
                     # Future steps

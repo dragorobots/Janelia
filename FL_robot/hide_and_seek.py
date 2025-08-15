@@ -305,7 +305,7 @@ class HideAndSeekNode(Node):
         # Publish progress updates
         progress_msg = String()
         if self.main_state == RobotState.START:
-            progress_msg.data = "start_phase"
+            progress_msg.data = "waiting_for_start"
         elif self.main_state == RobotState.PICK_COLOR:
             if self.pc_drive_mode == "auto_line" and self.pc_line_color_hue is not None:
                 progress_msg.data = "leaving_entrance"
@@ -455,7 +455,12 @@ class HideAndSeekNode(Node):
         # Publish line following status
         status_msg = String()
         if self.follow_state == FollowState.TRACKING:
-            status_msg.data = "following_line"
+            if self.main_state == RobotState.FOLLOWING_START_LINE:
+                status_msg.data = "following_start_line"
+            elif self.main_state == RobotState.FOLLOWING_TARGET_LINE:
+                status_msg.data = "following_target_line"
+            else:
+                status_msg.data = "following_line"
         elif self.follow_state == FollowState.SEARCHING:
             status_msg.data = "searching_for_line"
         elif self.follow_state == FollowState.REVERSING:
@@ -795,7 +800,7 @@ class HideAndSeekNode(Node):
             self.target_hsv_range = (lower, upper)
             
             self.get_logger().info(f"Color selected. Avg HSV: [{h}, {s}, {v}]. Range: L={lower}, U={upper}")
-            self.main_state = RobotState.FOLLOWING_LINE
+            self.main_state = RobotState.FOLLOWING_START_LINE
             self.follow_state = FollowState.TRACKING
 
     def lidar_callback(self, msg):
