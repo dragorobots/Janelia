@@ -4,7 +4,7 @@
 
 This tutorial will guide you through setting up and using a hide-and-seek robot system that plays with rats using advanced AI (k-ToM modeling). You'll learn how to:
 
-1. **Set up your Mac** with all necessary software
+1. **Set up your Windows PC** with all necessary software
 2. **Connect to your robot** via RealVNC
 3. **Install and configure** the robot software
 4. **Run complete experiments** with the robot
@@ -14,39 +14,40 @@ This tutorial will guide you through setting up and using a hide-and-seek robot 
 
 ---
 
-## 🖥️ **Step 1: Setting Up Your Mac**
+## 🖥️ **Step 1: Setting Up Your Windows PC**
 
 ### **1.1 Install Required Software**
 
 #### **Install Python (if not already installed)**
-1. Open **Terminal** (Applications → Utilities → Terminal)
+1. Open **Command Prompt** (Press Windows key + R, type `cmd`, press Enter)
 2. Check if Python is installed:
-   ```bash
-   python3 --version
+   ```cmd
+   python --version
    ```
 3. If you see a version number (like "Python 3.9.0"), you're good!
 4. If not, install Python from [python.org](https://www.python.org/downloads/)
+   - **Important**: Check "Add Python to PATH" during installation
 
 #### **Install Git (if not already installed)**
-1. In Terminal, check if Git is installed:
-   ```bash
+1. In Command Prompt, check if Git is installed:
+   ```cmd
    git --version
    ```
 2. If you see a version number, you're good!
 3. If not, install Git:
-   - **Option A (Recommended)**: Download from [git-scm.com](https://git-scm.com/download/mac)
-   - **Option B**: Use Homebrew (if you have it installed):
-     ```bash
-     brew install git
+   - **Option A (Recommended)**: Download from [git-scm.com](https://git-scm.com/download/win)
+   - **Option B**: Use winget (if available):
+     ```cmd
+     winget install Git.Git
      ```
-   - **Option C**: Use the command line tools (if you have Xcode):
-     ```bash
-     xcode-select --install
+   - **Option C**: Use Chocolatey (if you have it installed):
+     ```cmd
+     choco install git
      ```
 
 #### **Verify Git Installation**
 After installing Git, run:
-```bash
+```cmd
 git --version
 git config --global user.name "Your Name"
 git config --global user.email "your.email@example.com"
@@ -54,26 +55,25 @@ git config --global user.email "your.email@example.com"
 
 ### **1.2 Download the Robot Software**
 
-1. Open Terminal
+1. Open Command Prompt
 2. Navigate to your Documents folder:
-   ```bash
-   cd ~/Documents
+   ```cmd
+   cd %USERPROFILE%\Documents
    ```
 3. Download the robot software:
-   ```bash
+   ```cmd
    git clone https://github.com/dragorobots/Janelia.git
    ```
 4. Navigate to the robot folder:
-   ```bash
-   cd Janelia/FL_robot
+   ```cmd
+   cd Janelia\FL_robot
    ```
 
 ### **1.3 Install Python Packages**
 
-1. In Terminal (still in the FL_robot folder), run:
-   ```bash
-   chmod +x first_boot_pc.sh
-   ./first_boot_pc.sh
+1. In Command Prompt (still in the FL_robot folder), run:
+   ```cmd
+   first_boot_pc.bat
    ```
 
 **What this does:**
@@ -92,7 +92,7 @@ git config --global user.email "your.email@example.com"
 
 ### **2.1 Connect to Your Robot via RealVNC**
 
-1. Open **RealVNC Viewer** on your Mac
+1. Open **RealVNC Viewer** on your Windows PC
 2. Connect to your robot using the IP address provided by your lab
 3. You should see the robot's desktop
 
@@ -167,7 +167,7 @@ git config --global user.email "your.email@example.com"
 
 3. Copy the entire output (starts with "ssh-ed25519" and ends with "robot-setup")
 
-4. **On your Mac**, open a web browser and go to [GitHub SSH Keys](https://github.com/settings/keys)
+4. **On your Windows PC**, open a web browser and go to [GitHub SSH Keys](https://github.com/settings/keys)
 
 5. Click "New SSH key"
 6. Give it a title like "Robot SSH Key"
@@ -204,16 +204,16 @@ git config --global user.email "your.email@example.com"
 2. You'll see something like: `10.0.0.234 192.168.1.100`
 3. **Write down the first IP address** (this is your robot's IP)
 
-### **3.2 Test Connection from Your Mac**
+### **3.2 Test Connection from Your Windows PC**
 
-1. On your Mac, open Terminal
+1. On your Windows PC, open Command Prompt
 2. Test if you can reach the robot:
-   ```bash
+   ```cmd
    ping YOUR_ROBOT_IP
    ```
    (Replace YOUR_ROBOT_IP with the IP you wrote down)
 
-3. You should see responses like "64 bytes from YOUR_ROBOT_IP: icmp_seq=1 time=2.123 ms"
+3. You should see responses like "Reply from YOUR_ROBOT_IP: bytes=32 time=2ms TTL=64"
 
 ---
 
@@ -262,15 +262,15 @@ git config --global user.email "your.email@example.com"
 
 ### **5.1 Launch the Experiment GUI**
 
-1. On your Mac, open Terminal
+1. On your Windows PC, open Command Prompt
 2. Navigate to the robot folder:
-   ```bash
-   cd ~/Documents/Janelia/FL_robot
+   ```cmd
+   cd %USERPROFILE%\Documents\Janelia\FL_robot
    ```
 
 3. Start the experiment interface:
-   ```bash
-   python3 ktom_experimenter.py
+   ```cmd
+   python ktom_experimenter.py
    ```
 
 **You should see:**
@@ -351,7 +351,7 @@ Each trial records:
 ### **7.3 Exporting Data**
 
 1. Click **"Export Data to CSV"**
-2. Choose a location on your Mac to save the file
+2. Choose a location on your Windows PC to save the file
 3. The file will contain all trial data in spreadsheet format
 
 ---
@@ -366,10 +366,10 @@ Each trial records:
    cd /root/yahboomcar_ws/src/Janelia/FL_robot
    ./start_hide_and_seek.sh
    ```
-3. **Start PC GUI** on your Mac:
-   ```bash
-   cd ~/Documents/Janelia/FL_robot
-   python3 ktom_experimenter.py
+3. **Start PC GUI** on your Windows PC:
+   ```cmd
+   cd %USERPROFILE%\Documents\Janelia\FL_robot
+   python ktom_experimenter.py
    ```
 4. **Connect to robot** in the GUI
 
@@ -394,8 +394,13 @@ Each trial records:
 ### **Common Issues and Solutions**
 
 #### **"Git not found"**
-- **On Mac**: Install Git from [git-scm.com](https://git-scm.com/download/mac)
+- **On Windows**: Install Git from [git-scm.com](https://git-scm.com/download/win)
 - **On Robot**: Run `sudo apt install git -y`
+
+#### **"Python not found"**
+- Install Python from [python.org](https://www.python.org/downloads/)
+- Make sure to check "Add Python to PATH" during installation
+- Restart Command Prompt after installation
 
 #### **"Connection Failed"**
 - Check robot IP address is correct
@@ -413,9 +418,9 @@ Each trial records:
 - Restart robot system
 
 #### **"GUI won't start"**
-- Ensure Python packages are installed: `./first_boot_pc.sh`
-- Check Python version: `python3 --version`
-- Restart Terminal and try again
+- Ensure Python packages are installed: `first_boot_pc.bat`
+- Check Python version: `python --version`
+- Restart Command Prompt and try again
 
 #### **"Robot software errors"**
 - Update robot software:
@@ -444,9 +449,9 @@ Each trial records:
 ### **Color Measurement Tool**
 
 To calibrate line colors:
-1. On your Mac, run:
-   ```bash
-   python3 color_measurer.py --ip YOUR_ROBOT_IP --port 8080
+1. On your Windows PC, run:
+   ```cmd
+   python color_measurer.py --ip YOUR_ROBOT_IP --port 8080
    ```
 2. Use the tool to measure line colors
 3. Update color values in the robot software
@@ -477,7 +482,7 @@ To calibrate line colors:
 
 ### **What Information to Provide**
 
-- Your operating system (Mac)
+- Your operating system (Windows)
 - Robot IP address
 - Error messages (copy and paste exactly)
 - Steps you've already tried
@@ -488,8 +493,8 @@ To calibrate line colors:
 
 **You're ready to run experiments when:**
 
-✅ **Mac Setup:**
-- Python 3.8+ installed
+✅ **Windows PC Setup:**
+- Python 3.8+ installed and added to PATH
 - Git installed and configured
 - All packages installed successfully
 - GUI opens without errors
@@ -515,20 +520,23 @@ To calibrate line colors:
 
 ## 📝 **Quick Reference Commands**
 
-### **On Your Mac:**
-```bash
+### **On Your Windows PC:**
+```cmd
 # Start GUI
-cd ~/Documents/Janelia/FL_robot
-python3 ktom_experimenter.py
+cd %USERPROFILE%\Documents\Janelia\FL_robot
+python ktom_experimenter.py
 
 # Test connection
 ping YOUR_ROBOT_IP
 
 # Reinstall packages (if needed)
-./first_boot_pc.sh
+first_boot_pc.bat
 
 # Check Git installation
 git --version
+
+# Check Python installation
+python --version
 ```
 
 ### **On Robot (via RealVNC):**
