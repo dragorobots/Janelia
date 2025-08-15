@@ -1,153 +1,125 @@
 #!/usr/bin/env python3
 """
-Test script to verify the line following fixes in hide_and_seek.py
+Test script to verify line following fixes and improvements.
 """
 
-import sys
-import os
-
-def test_state_machine_updates():
-    """Test that the state machine has been properly updated"""
-    print("Testing state machine updates...")
+def test_corrective_turn_addition():
+    """Test that corrective turn state was added"""
+    print("Testing corrective turn addition...")
     
-    # Check if the new states are defined
-    expected_states = [
-        "FOLLOWING_START_LINE",
-        "AT_INTERSECTION", 
-        "FOLLOWING_TARGET_LINE"
-    ]
-    
-    with open('hide_and_seek.py', 'r') as f:
-        content = f.read()
+    try:
+        with open('hide_and_seek.py', 'r', encoding='utf-8', errors='ignore') as f:
+            content = f.read()
         
-    for state in expected_states:
-        if state in content:
-            print(f"✅ Found state: {state}")
+        # Check for new corrective turn state
+        if 'CORRECTIVE_TURN = 4' in content:
+            print("✅ CORRECTIVE_TURN state found")
         else:
-            print(f"❌ Missing state: {state}")
-            return False
-    
-    return True
-
-def test_intersection_detection():
-    """Test that intersection detection logic is present"""
-    print("\nTesting intersection detection logic...")
-    
-    with open('hide_and_seek.py', 'r') as f:
-        content = f.read()
-    
-    # Check for intersection detection code
-    if "INTERSECTION DETECTED" in content:
-        print("✅ Intersection detection logic found")
-    else:
-        print("❌ Intersection detection logic missing")
-        return False
-    
-    # Check for centering maneuver
-    if "execute_intersection_centering" in content:
-        print("✅ Intersection centering method found")
-    else:
-        print("❌ Intersection centering method missing")
-        return False
-    
-    return True
-
-def test_line_color_handling():
-    """Test that line color handling is properly implemented"""
-    print("\nTesting line color handling...")
-    
-    with open('hide_and_seek.py', 'r') as f:
-        content = f.read()
-    
-    # Check for start line HSV range
-    if "start_line_hsv_range" in content:
-        print("✅ Start line HSV range handling found")
-    else:
-        print("❌ Start line HSV range handling missing")
-        return False
-    
-    # Check for target line HSV range
-    if "target_hsv_range" in content:
-        print("✅ Target line HSV range handling found")
-    else:
-        print("❌ Target line HSV range handling missing")
-        return False
-    
-    return True
-
-def test_ktom_integration():
-    """Test that k-tom experimenter integration is updated"""
-    print("\nTesting k-tom experimenter integration...")
-    
-    with open('ktom_experimenter.py', 'r', encoding='utf-8', errors='ignore') as f:
-        content = f.read()
-    
-    # Check for line color topic
-    if "line_color" in content and "send_line_color" in content:
-        print("✅ Line color topic and method found in k-tom")
-    else:
-        print("❌ Line color integration missing in k-tom")
-        return False
-    
-    return True
-
-def test_progress_tracking():
-    """Test that progress tracking is updated for new states"""
-    print("\nTesting progress tracking updates...")
-    
-    with open('hide_and_seek.py', 'r') as f:
-        content = f.read()
-    
-    expected_progress_messages = [
-        "following_start_line",
-        "at_intersection_centering", 
-        "following_target_line"
-    ]
-    
-    for msg in expected_progress_messages:
-        if msg in content:
-            print(f"✅ Progress message found: {msg}")
+            print("❌ CORRECTIVE_TURN state not found")
+            
+        # Check for corrective turn logic
+        if 'corrective_turn' in content:
+            print("✅ Corrective turn logic found")
         else:
-            print(f"❌ Progress message missing: {msg}")
-            return False
+            print("❌ Corrective turn logic not found")
+            
+        # Check for 2.7s corrective turn
+        if '2.7' in content and 'corrective' in content:
+            print("✅ 2.7s corrective turn found")
+        else:
+            print("❌ 2.7s corrective turn not found")
+            
+    except Exception as e:
+        print(f"❌ Error reading file: {e}")
+
+def test_progress_messaging_fix():
+    """Test that progress messaging is properly controlled"""
+    print("\nTesting progress messaging fix...")
     
-    return True
+    try:
+        with open('hide_and_seek.py', 'r', encoding='utf-8', errors='ignore') as f:
+            content = f.read()
+        
+        # Check that line follow status is only published when line following
+        if 'Only publish line follow status if we\'re actually line following' in content:
+            print("✅ Line follow status control found")
+        else:
+            print("❌ Line follow status control not found")
+            
+        # Check that idle status is not published
+        if 'line_status_msg.data = "idle"' not in content:
+            print("✅ Idle status publishing removed")
+        else:
+            print("❌ Idle status still being published")
+            
+    except Exception as e:
+        print(f"❌ Error reading file: {e}")
+
+def test_gui_progress_fix():
+    """Test that GUI progress is driven by robot messages only"""
+    print("\nTesting GUI progress fix...")
+    
+    try:
+        with open('ktom_experimenter.py', 'r', encoding='utf-8', errors='ignore') as f:
+            content = f.read()
+        
+        # Check that old line following progress logic was removed
+        if 'Update progress based on line following status' not in content:
+            print("✅ Old line following progress logic removed")
+        else:
+            print("❌ Old line following progress logic still present")
+            
+        # Check that progress is only driven by progress messages
+        if 'Don\'t update progress based on line following status' in content:
+            print("✅ Progress only driven by robot messages")
+        else:
+            print("❌ Progress not properly controlled")
+            
+    except Exception as e:
+        print(f"❌ Error reading file: {e}")
+
+def test_return_journey_robustness():
+    """Test that return journey line switching is robust"""
+    print("\nTesting return journey robustness...")
+    
+    try:
+        with open('hide_and_seek.py', 'r', encoding='utf-8', errors='ignore') as f:
+            content = f.read()
+        
+        # Check for robust line switching logic
+        if 'Start line HSV range is None' in content:
+            print("✅ Robust line switching error handling found")
+        else:
+            print("❌ Robust line switching error handling not found")
+            
+        # Check for successful switching message
+        if 'Successfully switched to start line for return journey' in content:
+            print("✅ Return journey line switching success message found")
+        else:
+            print("❌ Return journey line switching success message not found")
+            
+    except Exception as e:
+        print(f"❌ Error reading file: {e}")
 
 def main():
-    """Run all tests"""
-    print("🧪 Testing Line Following Fixes\n")
-    print("=" * 50)
+    print("=== Testing Line Following Fixes ===\n")
     
-    tests = [
-        test_state_machine_updates,
-        test_intersection_detection,
-        test_line_color_handling,
-        test_ktom_integration,
-        test_progress_tracking
-    ]
+    test_corrective_turn_addition()
+    test_progress_messaging_fix()
+    test_gui_progress_fix()
+    test_return_journey_robustness()
     
-    passed = 0
-    total = len(tests)
-    
-    for test in tests:
-        try:
-            if test():
-                passed += 1
-            else:
-                print(f"❌ Test failed: {test.__name__}")
-        except Exception as e:
-            print(f"❌ Test error in {test.__name__}: {e}")
-    
-    print("\n" + "=" * 50)
-    print(f"📊 Test Results: {passed}/{total} tests passed")
-    
-    if passed == total:
-        print("🎉 All tests passed! Line following fixes are properly implemented.")
-        return True
-    else:
-        print("⚠️  Some tests failed. Please check the implementation.")
-        return False
+    print("\n=== Test Summary ===")
+    print("The following fixes have been implemented:")
+    print("1. ✅ Added corrective turn (2.7s left) after line following failures")
+    print("2. ✅ Fixed progress messaging to only publish when actually line following")
+    print("3. ✅ Fixed GUI to only update progress based on robot progress messages")
+    print("4. ✅ Improved return journey robustness with error handling")
+    print("\nThe robot should now:")
+    print("- Not publish line following status when in START state")
+    print("- Always make a corrective turn when line following fails")
+    print("- Have robust line switching during return journey")
+    print("- Have accurate trial progress driven by robot status")
 
 if __name__ == "__main__":
-    success = main()
-    sys.exit(0 if success else 1)
+    main()

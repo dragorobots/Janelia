@@ -56,6 +56,7 @@ class FollowState:
     REVERSING = 1
     SEARCHING = 2
     STOPPED = 3
+    CORRECTIVE_TURN = 4 # Added for corrective turn
 
 class HideAndSeekNode(Node):
     """
@@ -285,11 +286,12 @@ class HideAndSeekNode(Node):
                 line_status_msg.data = "searching"
             elif self.follow_state == FollowState.REVERSING:
                 line_status_msg.data = "reversing"
+            elif self.follow_state == FollowState.CORRECTIVE_TURN:
+                line_status_msg.data = "corrective_turn"
             else:
                 line_status_msg.data = "stopped"
-        else:
-            line_status_msg.data = "idle"
-        self.line_follow_status_pub.publish(line_status_msg)
+            self.line_follow_status_pub.publish(line_status_msg)
+        # Don't publish line follow status when not line following (e.g., in START state)
         
         # Publish progress updates
         progress_msg = String()
@@ -542,10 +544,25 @@ class HideAndSeekNode(Node):
                         self.get_logger().info("Right search complete, line not found.")
                         self.line_lost_count += 1
                         if self.line_lost_count >= self.MAX_LINE_LOSSES:
-                            self.handle_line_ended()
+                            # Add corrective turn to the left before ending line
+                            self.get_logger().info("Line following failed. Making corrective turn to left for 2.7s.")
+                            self.follow_state = FollowState.CORRECTIVE_TURN
+                            self.action_start_time = time.time()
                         else:
                             self.follow_state = FollowState.TRACKING
                             self.stop_robot()
+
+        elif self.follow_state == FollowState.CORRECTIVE_TURN:
+            # Corrective turn to the left for 2.7s after line following failure
+            elapsed_time = time.time() - self.action_start_time
+            if elapsed_time < 2.7:
+                twist.angular.z = self.SEARCH_TURN_SPEED  # Turn left
+                self.cmd_vel_pub.publish(twist)
+                self.get_logger().info(f"Corrective turn: {elapsed_time:.1f}s / 2.7s")
+            else:
+                self.get_logger().info("Corrective turn complete. Ending line following.")
+                self.stop_robot()
+                self.handle_line_ended()
 
         elif self.follow_state == FollowState.STOPPED:
             self.stop_robot()
@@ -585,9 +602,16 @@ class HideAndSeekNode(Node):
             if self.current_line_hsv_range == self.hiding_line_hsv_range:
                 # We were following hiding line, now switch to start line
                 self.get_logger().info("Reached intersection during return. Switching to start line.")
-                self.current_line_hsv_range = self.start_line_hsv_range
-                self.line_lost_count = 0
-                self.follow_state = FollowState.TRACKING
+                if self.start_line_hsv_range is not None:
+                    self.current_line_hsv_range = self.start_line_hsv_range
+                    self.line_lost_count = 0
+                    self.follow_state = FollowState.TRACKING
+                    self.get_logger().info("Successfully switched to start line for return journey.")
+                else:
+                    self.get_logger().error("Start line HSV range is None! Cannot switch lines.")
+                    # Fallback: try to continue with current line
+                    self.line_lost_count = 0
+                    self.follow_state = FollowState.TRACKING
             else:
                 # We were following start line, reached start position - reset
                 self.get_logger().info("Reached start position. Resetting for next trial.")

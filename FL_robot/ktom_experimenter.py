@@ -1009,16 +1009,11 @@ Step-by-Step Process:
                 # Set up status callbacks
                 def on_line_follow_status(status):
                     self.update_robot_status(f"Line Follow: {status}")
-                    # Update progress based on line following status
-                    if "following" in status.lower():
-                        self.update_trial_progress(3)  # Step 3: Follow the line
-                    elif "intersection" in status.lower():
-                        self.update_trial_progress(2)  # Step 2: Reach intersection
+                    # Don't update progress based on line following status - only use progress messages
                 
                 def on_rat_detection_status(found):
                     self.update_robot_status(f"Rat Detection: {'Found' if found else 'Not Found'}")
-                    if found:
-                        self.update_trial_progress(4)  # Step 4: Wait at hiding spot (detect rat)
+                    # Don't update progress based on rat detection - only use progress messages
                 
                 def on_progress_status(progress):
                     self.update_robot_status(f"Progress: {progress}")
