@@ -769,9 +769,9 @@ Step-by-Step Process:
         self.current_step_label.pack(pady=5)
         
         # === BIG GREEN START TRIAL BUTTON ===
-        # Create a frame at the bottom for the start trial button
-        start_trial_frame = ttk.Frame(parent)
-        start_trial_frame.pack(side='bottom', fill='x', padx=10, pady=10)
+        # Create a frame for the start trial button in the right panel
+        start_trial_frame = ttk.Frame(right_panel)
+        start_trial_frame.pack(fill='x', pady=10)
         
         # Big green start trial button
         self.start_trial_button = ttk.Button(start_trial_frame, text="🚀 START TRIAL", 
@@ -1040,24 +1040,35 @@ Step-by-Step Process:
                     self.update_robot_status(f"Progress: {progress}")
                     # Map progress messages to trial steps
                     progress_lower = progress.lower()
+                    
+                    # Only update if the progress actually changed to prevent flashing
+                    current_step = getattr(self, '_last_progress_step', -1)
+                    new_step = -1
+                    
                     if "waiting_for_start" in progress_lower:
-                        self.update_trial_progress(0)  # Waiting for start
+                        new_step = 0  # Waiting for start
                     elif "trial_started" in progress_lower:
-                        self.update_trial_progress(1)  # Trial started
+                        new_step = 1  # Trial started
                     elif "leaving_entrance" in progress_lower or "entrance" in progress_lower:
-                        self.update_trial_progress(1)  # Step 1: Leave entrance
+                        new_step = 1  # Step 1: Leave entrance
                     elif "intersection" in progress_lower:
-                        self.update_trial_progress(2)  # Step 2: Reach intersection
+                        new_step = 2  # Step 2: Reach intersection
                     elif "following_line" in progress_lower:
-                        self.update_trial_progress(3)  # Step 3: Follow the line
+                        new_step = 3  # Step 3: Follow the line
                     elif "waiting_for_rat" in progress_lower:
-                        self.update_trial_progress(4)  # Step 4: Wait at hiding spot
+                        new_step = 4  # Step 4: Wait at hiding spot
                     elif "turning_180" in progress_lower:
-                        self.update_trial_progress(5)  # Step 5: Wait 10s, turn 180°
+                        new_step = 5  # Step 5: Wait 10s, turn 180°
                     elif "returning_home" in progress_lower:
-                        self.update_trial_progress(7)  # Step 7: Return to start
+                        new_step = 7  # Step 7: Return to start
                     elif "reset" in progress_lower:
-                        self.update_trial_progress(8)  # Step 8: Wait for new command
+                        new_step = 8  # Step 8: Wait for new command
+                    
+                    # Only update if step actually changed
+                    if new_step != current_step:
+                        self._last_progress_step = new_step
+                        if new_step >= 0:
+                            self.update_trial_progress(new_step)
                 
                 # Connect with callbacks
                 if self.robot_link.connect(on_lf=on_line_follow_status, 
@@ -1068,6 +1079,10 @@ Step-by-Step Process:
                     self.connect_button.config(text="Disconnect")
                     self.abort_status_label.config(text="🚨 ABORT MODE: INACTIVE", foreground='green')
                     self.update_robot_status("Successfully connected to robot")
+                    
+                    # Reset progress tracking to prevent flashing
+                    self._last_progress_step = -1
+                    self.update_trial_progress(0)  # Reset to waiting state
                 else:
                     self.robot_status = "Connection Failed"
                     self.robot_status_label.config(text="Status: Connection Failed", foreground='red')
