@@ -148,6 +148,7 @@ class HideAndSeekNode(Node):
         self.pc_manual_found = False
         self.pc_line_color_hue = None
         self.pc_override_active = False
+        self.pc_color_selection_mode = "auto"  # auto, manual
 
         # --- Main Control Loop ---
         self.timer = self.create_timer(0.1, self.main_loop)
@@ -176,6 +177,14 @@ class HideAndSeekNode(Node):
         elif toggle_str.startswith("rat_mode="):
             self.pc_rat_mode = toggle_str.split("=")[1]
             self.get_logger().info(f"PC rat mode: {self.pc_rat_mode}")
+            
+        elif toggle_str.startswith("color_mode="):
+            self.pc_color_selection_mode = toggle_str.split("=")[1]
+            self.get_logger().info(f"PC color selection mode: {self.pc_color_selection_mode}")
+            
+        elif toggle_str == "start_trial=true":
+            self.start_trial()
+            self.get_logger().info("PC start trial command received")
             
         elif toggle_str == "manual_found=true":
             self.pc_manual_found = True
@@ -238,7 +247,7 @@ class HideAndSeekNode(Node):
         display_view = frame.copy()
 
         if self.main_state == RobotState.START:
-            self.execute_start_phase()
+            self.execute_start_phase(display_view)
         elif self.main_state == RobotState.PICK_COLOR:
             self.execute_pick_color_phase(display_view)
         elif self.main_state in [RobotState.FOLLOWING_LINE, RobotState.RETURNING_HOME]:
@@ -318,32 +327,59 @@ class HideAndSeekNode(Node):
             progress_msg.data = "manual_control"
         self.progress_pub.publish(progress_msg)
 
-    def execute_start_phase(self):
-        self.get_logger().info("STATE: START - Signaling trial start.")
+    def execute_start_phase(self, frame):
+        self.get_logger().info("STATE: START - Waiting for trial start command from PC.")
+        # Display waiting message on camera feed
+        cv2.putText(frame, "Waiting for START TRIAL command from PC...", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+        cv2.putText(frame, "Press 's' to start manually", (50, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+        
+        # Check for manual start key
+        key = self.getKey()
+        if key == 's':
+            self.start_trial()
+        
+        # Publish status to PC
+        progress_msg = String()
+        progress_msg.data = "waiting_for_start"
+        self.progress_pub.publish(progress_msg)
+
+    def start_trial(self):
+        """Start the trial - called from PC or manual key press"""
+        self.get_logger().info("TRIAL STARTING - Signaling trial start.")
         self.get_logger().info("Centering camera and setting dispenser to zero position.")
+        
+        # Center camera and dispenser
         s1_msg = Int32(); s1_msg.data = self.initial_camera_yaw
         self.servo1_pub.publish(s1_msg)
         s2_msg = Int32(); s2_msg.data = self.initial_dispenser_angle
         self.servo2_pub.publish(s2_msg)
         time.sleep(1.0)
 
+        # Beep sequence
         for _ in range(3):
             self.buzzer_pub.publish(UInt16(data=1)); time.sleep(0.4)
             self.buzzer_pub.publish(UInt16(data=0)); time.sleep(0.4)
         
+        # Small movement to indicate start
         twist = Twist(); twist.linear.x = 0.1
         self.cmd_vel_pub.publish(twist); time.sleep(1)
         twist.linear.x = -0.1
         self.cmd_vel_pub.publish(twist); time.sleep(1)
         self.stop_robot()
         
+        # Transition to color selection
         self.main_state = RobotState.PICK_COLOR
         self.get_logger().info("Transitioning to PICK_COLOR state.")
+        
+        # Publish progress update
+        progress_msg = String()
+        progress_msg.data = "trial_started"
+        self.progress_pub.publish(progress_msg)
 
     def execute_pick_color_phase(self, frame):
-        # Check if we should skip manual color selection in auto mode
-        if self.pc_drive_mode == "auto_line" and self.pc_line_color_hue is not None:
-            # Use the color provided by PC
+        # Check color selection mode
+        if self.pc_color_selection_mode == "auto" and self.pc_line_color_hue is not None:
+            # Auto mode: Use the color provided by PC
             h = self.pc_line_color_hue
             s, v = 100, 100  # Default saturation and value
             h_margin, s_margin, v_margin = 10, 70, 70
@@ -362,9 +398,12 @@ class HideAndSeekNode(Node):
             return
         
         # Manual color selection mode
-        cv2.putText(frame, "Click and drag to select the line color", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+        cv2.putText(frame, "MANUAL MODE: Click and drag to select the line color", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+        cv2.putText(frame, "Draw a rectangle around the line you want to follow", (50, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+        
         if self.selecting_box:
             cv2.rectangle(frame, self.box_start_point, self.box_end_point, (0, 255, 0), 2)
+            cv2.putText(frame, "Release mouse to confirm selection", (50, 110), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
     def execute_line_follow(self, frame, returning=False):
         # Check if PC has set a drive mode that overrides line following
@@ -388,20 +427,37 @@ class HideAndSeekNode(Node):
             status_msg.data = "stopped"
         self.line_follow_status_pub.publish(status_msg)
 
+        # Create HSV mask for line detection
         hsv_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-        if len(self.target_hsv_range) == 4:
+        
+        # Handle different HSV range formats
+        if isinstance(self.target_hsv_range, tuple) and len(self.target_hsv_range) == 2:
+            # Standard format: (lower, upper)
+            mask = cv2.inRange(hsv_frame, self.target_hsv_range[0], self.target_hsv_range[1])
+        elif isinstance(self.target_hsv_range, tuple) and len(self.target_hsv_range) == 4:
+            # Extended format: (lower1, upper1, lower2, upper2) for hue wrap-around
             mask1 = cv2.inRange(hsv_frame, self.target_hsv_range[0], self.target_hsv_range[1])
             mask2 = cv2.inRange(hsv_frame, self.target_hsv_range[2], self.target_hsv_range[3])
             mask = cv2.add(mask1, mask2)
         else:
-            mask = cv2.inRange(hsv_frame, self.target_hsv_range[0], self.target_hsv_range[1])
+            self.get_logger().error(f"Invalid HSV range format: {self.target_hsv_range}")
+            return None
         
         kernel = np.ones((5, 5), np.uint8)
         mask = cv2.erode(mask, kernel, iterations=1)
         mask = cv2.dilate(mask, kernel, iterations=1)
 
+        # Calculate line center and radius
         M = cv2.moments(mask)
         radius = int(math.sqrt(M["m00"] / math.pi)) if M["m00"] > 0 else 0
+
+        # Add debugging information to frame
+        cv2.putText(frame, f"Line Radius: {radius} (min: {self.min_radius_threshold})", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        cv2.putText(frame, f"State: {self.follow_state}", (50, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        
+        # Show mask for debugging
+        mask_display = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
+        mask_display = cv2.resize(mask_display, (320, 240))
 
         twist = Twist()
         if self.follow_state == FollowState.TRACKING:
@@ -414,8 +470,9 @@ class HideAndSeekNode(Node):
                 twist.angular.z = float(z_pid)
                 self.cmd_vel_pub.publish(twist)
                 cv2.circle(frame, (cx, cy), 10, (255, 0, 255), -1)
+                cv2.putText(frame, f"Following: cx={cx}, error={error:.1f}, z={z_pid:.3f}", (50, 110), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
             else:
-                self.get_logger().info("Line lost, reversing...")
+                self.get_logger().info(f"Line lost (radius: {radius} < {self.min_radius_threshold}), reversing...")
                 self.follow_state = FollowState.REVERSING
                 self.action_start_time = time.time()
                 self.stop_robot()

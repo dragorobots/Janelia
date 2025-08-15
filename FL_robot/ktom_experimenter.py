@@ -553,16 +553,33 @@ class KToMExperimenterGUI:
                                             command=self.on_send_target)
         self.send_target_button.pack(pady=5)
         
+                # Start Trial button
+        self.start_trial_button = ttk.Button(control_frame, text="🚀 START TRIAL", 
+                                           command=self.on_start_trial, style='Accent.TButton')
+        self.start_trial_button.pack(pady=5)
+        
         # Auto-send target button (uses k-ToM recommendation)
         self.auto_send_target_button = ttk.Button(control_frame, text="🤖 Auto-Send k-ToM Target", 
-                                                 command=self.on_auto_send_target, style='Accent.TButton')
+                                                  command=self.on_auto_send_target, style='Accent.TButton')
         self.auto_send_target_button.pack(pady=5)
+        
+                # Color Selection Mode
+        ttk.Label(control_frame, text="Color Selection Mode:").pack(anchor='w', pady=(10,0))
+        self.color_mode_var = tk.StringVar(value="auto")
+        color_combo = ttk.Combobox(control_frame, textvariable=self.color_mode_var, 
+                                  values=["auto", "manual"], state='readonly')
+        color_combo.pack(fill='x', pady=2)
+        
+        # Send color mode button
+        self.send_color_mode_button = ttk.Button(control_frame, text="Set Color Mode", 
+                                               command=self.on_send_color_mode)
+        self.send_color_mode_button.pack(pady=5)
         
         # Mode toggles
         ttk.Label(control_frame, text="Drive Mode:").pack(anchor='w', pady=(10,0))
         self.drive_mode_var = tk.StringVar(value="auto_line")
         drive_combo = ttk.Combobox(control_frame, textvariable=self.drive_mode_var, 
-                                  values=["auto_line", "manual_line", "manual_drive"], state='readonly')
+                                   values=["auto_line", "manual_line", "manual_drive"], state='readonly')
         drive_combo.pack(fill='x', pady=2)
         
         # Send drive mode button
@@ -924,7 +941,11 @@ class KToMExperimenterGUI:
                     self.update_robot_status(f"Progress: {progress}")
                     # Map progress messages to trial steps
                     progress_lower = progress.lower()
-                    if "leaving_entrance" in progress_lower or "entrance" in progress_lower:
+                    if "waiting_for_start" in progress_lower:
+                        self.update_trial_progress(0)  # Waiting for start
+                    elif "trial_started" in progress_lower:
+                        self.update_trial_progress(1)  # Trial started
+                    elif "leaving_entrance" in progress_lower or "entrance" in progress_lower:
                         self.update_trial_progress(1)  # Step 1: Leave entrance
                     elif "intersection" in progress_lower:
                         self.update_trial_progress(2)  # Step 2: Reach intersection
@@ -974,6 +995,24 @@ class KToMExperimenterGUI:
             target_idx = target_map.get(target, 0)
             self.robot_link.send_target(target_idx)
             self.update_robot_status(f"Sent target spot: {target} (index: {target_idx})")
+        else:
+            messagebox.showwarning("Warning", "Not connected to robot!")
+
+    def on_start_trial(self):
+        """Start the trial on the robot"""
+        if self.robot_link and self.robot_link.connected:
+            self.robot_link.send_toggle("start_trial=true")
+            self.update_robot_status("🚀 Sent START TRIAL command to robot")
+            self.update_trial_progress(1)  # Start with step 1
+        else:
+            messagebox.showwarning("Warning", "Not connected to robot!")
+
+    def on_send_color_mode(self):
+        """Send color selection mode to robot"""
+        if self.robot_link and self.robot_link.connected:
+            mode = self.color_mode_var.get()
+            self.robot_link.send_toggle(f"color_mode={mode}")
+            self.update_robot_status(f"Set color selection mode: {mode}")
         else:
             messagebox.showwarning("Warning", "Not connected to robot!")
 
