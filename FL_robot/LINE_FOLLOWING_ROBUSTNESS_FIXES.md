@@ -3,22 +3,34 @@
 ## Issues Addressed
 
 ### 1. **Robot Publishing Line Following Status Before Trial Start**
-**Problem**: The robot was publishing "Line Follow: following" and "Line Follow: searching" messages immediately when `./start_hide_and_seek.sh` was run, even though the trial hadn't started yet.
+**Problem**: The robot was publishing "Line Follow: following" and "Line Follow: searching" messages immediately when `./start_hide_and_seek.sh` was run, even though the trial hadn't started yet. It was also publishing line following status when in idle states like `PICK_COLOR`.
 
-**Solution**: Modified `publish_status_updates()` in `hide_and_seek.py` to only publish line following status when the robot is actually in line following states (`FOLLOWING_START_LINE`, `FOLLOWING_HIDING_LINE`, `RETURNING_HOME`). Removed the "idle" status publishing.
+**Solution**: Modified `publish_status_updates()` in `hide_and_seek.py` to only publish line following status when the robot is actually in line following states (`FOLLOWING_START_LINE`, `FOLLOWING_HIDING_LINE`, `RETURNING_HOME`) AND the `follow_state` is not `STOPPED`. Also ensured that when transitioning to non-line-following states, the `follow_state` is properly set to `STOPPED`.
 
 **Code Changes**:
 ```python
 # Only publish line follow status if we're actually line following
-if self.main_state in [RobotState.FOLLOWING_START_LINE, RobotState.FOLLOWING_HIDING_LINE, RobotState.RETURNING_HOME]:
+if (self.main_state in [RobotState.FOLLOWING_START_LINE, RobotState.FOLLOWING_HIDING_LINE, RobotState.RETURNING_HOME] and 
+    self.follow_state != FollowState.STOPPED):
     # ... publish line status
 # Don't publish line follow status when not line following (e.g., in START state)
+
+# In start_trial():
+self.follow_state = FollowState.STOPPED  # Ensure line following is stopped
+
+# In execute_manual_control():
+self.follow_state = FollowState.STOPPED  # Ensure line following is stopped
 ```
 
 ### 2. **Missing Corrective Turn After Line Following Failures**
 **Problem**: When line following failed, the robot would immediately transition to the next state without making a corrective turn to try to get back to the midline.
 
-**Solution**: Added a new `CORRECTIVE_TURN` state to `FollowState` and implemented corrective turn logic. After line following fails (after `MAX_LINE_LOSSES`), the robot now makes a 2.7-second turn to the left before ending the line following phase.
+**Solution**: Implemented the correct line following recovery pattern. When a line is lost, the robot follows this sequence:
+1. Reverse for 0.5 seconds
+2. Turn left for 2.7 seconds (searching for line)
+3. Turn right for 5.4 seconds (searching for line)
+4. **Line officially lost** - Turn left for 2.7 seconds (corrective turn to return to center, not searching)
+5. Then transition to the next state
 
 **Code Changes**:
 ```python
@@ -29,7 +41,25 @@ class FollowState:
     STOPPED = 3
     CORRECTIVE_TURN = 4  # Added for corrective turn
 
+# Search durations:
+self.SEARCH_DURATION_LEFT = 2.7   # Left search duration
+self.SEARCH_DURATION_RIGHT = 5.4  # Right search duration
+
 # In execute_line_follow():
+elif self.follow_state == FollowState.SEARCHING:
+    # ... search logic ...
+    else:
+        if self.search_direction == 1:
+            # Left search complete, switch to right search
+            self.search_direction = -1
+            self.action_start_time = time.time()
+        else:
+            # Right search complete, line not found
+            # Line is officially lost - always do corrective turn to return to center
+            self.get_logger().info("Line officially lost. Making corrective turn to left for 2.7s to return to center.")
+            self.follow_state = FollowState.CORRECTIVE_TURN
+            self.action_start_time = time.time()
+
 elif self.follow_state == FollowState.CORRECTIVE_TURN:
     # Corrective turn to the left for 2.7s after line following failure
     elapsed_time = time.time() - self.action_start_time
@@ -84,16 +114,16 @@ elif self.main_state == RobotState.RETURNING_HOME:
 ### Robot Startup
 - When `./start_hide_and_seek.sh` is run, the robot should only show "waiting for start trial" status
 - No line following status messages should be published until the trial actually starts
+- No line following status messages should be published when in `PICK_COLOR` state
 - Trial progress should show step 0 (waiting for start)
 
 ### Line Following Robustness
-- When line following fails (line lost for `MAX_LINE_LOSSES` times), the robot will:
+- When line following fails (line lost), the robot will:
   1. Reverse for 0.5 seconds
-  2. Turn right for 2.7 seconds
-  3. Turn left for 5.5 seconds
-  4. Turn right for 2.7 seconds
-  5. **NEW**: Make a corrective turn to the left for 2.7 seconds
-  6. Then transition to the next state
+  2. Turn left for 2.7 seconds (searching for line)
+  3. Turn right for 5.4 seconds (searching for line)
+  4. **Line officially lost** - Turn left for 2.7 seconds (corrective turn to return to center, not searching)
+  5. Then transition to the next state
 
 ### Trial Progress Accuracy
 - Trial progress is now driven entirely by robot progress messages
@@ -109,9 +139,10 @@ elif self.main_state == RobotState.RETURNING_HOME:
 
 1. **`hide_and_seek.py`**:
    - Added `CORRECTIVE_TURN` state to `FollowState`
-   - Modified `publish_status_updates()` to control line following status publishing
+   - Modified `publish_status_updates()` to control line following status publishing with follow_state check
    - Enhanced `execute_line_follow()` with corrective turn logic
    - Improved `handle_line_ended()` with robust error handling
+   - Ensured `follow_state` is set to `STOPPED` in `start_trial()` and `execute_manual_control()`
 
 2. **`ktom_experimenter.py`**:
    - Modified `on_connect_robot()` to remove old progress update logic
@@ -128,7 +159,9 @@ python test_line_following_fixes.py
 ```
 
 All tests should pass, confirming that:
-- ✅ Corrective turn state and logic are implemented
+- ✅ Corrective turn state and logic are implemented correctly
+- ✅ Line following follows the correct pattern: reverse → search left → search right → corrective turn
 - ✅ Progress messaging is properly controlled
 - ✅ GUI progress is driven by robot messages only
 - ✅ Return journey robustness is improved
+- ✅ Idle state line following status publishing is fixed

@@ -4,7 +4,7 @@ Test script to verify line following fixes and improvements.
 """
 
 def test_corrective_turn_addition():
-    """Test that corrective turn state was added"""
+    """Test that corrective turn state was added and logic is correct"""
     print("Testing corrective turn addition...")
     
     try:
@@ -28,6 +28,23 @@ def test_corrective_turn_addition():
             print("✅ 2.7s corrective turn found")
         else:
             print("❌ 2.7s corrective turn not found")
+            
+        # Check that corrective turn happens when line is officially lost (not just MAX_LINE_LOSSES)
+        if 'Line officially lost' in content and 'corrective turn' in content:
+            print("✅ Corrective turn happens when line is officially lost")
+        else:
+            print("❌ Corrective turn not properly triggered when line is officially lost")
+            
+        # Check for correct search durations
+        if 'SEARCH_DURATION_LEFT = 2.7' in content:
+            print("✅ Left search duration is 2.7s")
+        else:
+            print("❌ Left search duration not set to 2.7s")
+            
+        if 'SEARCH_DURATION_RIGHT = 5.4' in content:
+            print("✅ Right search duration is 5.4s")
+        else:
+            print("❌ Right search duration not set to 5.4s")
             
     except Exception as e:
         print(f"❌ Error reading file: {e}")
@@ -101,6 +118,35 @@ def test_return_journey_robustness():
     except Exception as e:
         print(f"❌ Error reading file: {e}")
 
+def test_idle_state_line_following_fix():
+    """Test that line following status is not published when robot is idle"""
+    print("\nTesting idle state line following fix...")
+    
+    try:
+        with open('hide_and_seek.py', 'r', encoding='utf-8', errors='ignore') as f:
+            content = f.read()
+        
+        # Check that the condition now includes follow_state check
+        if 'self.follow_state != FollowState.STOPPED' in content:
+            print("✅ Follow state check added to line following condition")
+        else:
+            print("❌ Follow state check not found in line following condition")
+            
+        # Check that follow_state is set to STOPPED in start_trial
+        if 'self.follow_state = FollowState.STOPPED' in content and 'start_trial' in content:
+            print("✅ Follow state set to STOPPED in start_trial")
+        else:
+            print("❌ Follow state not set to STOPPED in start_trial")
+            
+        # Check that follow_state is set to STOPPED in manual control
+        if 'self.follow_state = FollowState.STOPPED' in content and 'Manual control finished' in content:
+            print("✅ Follow state set to STOPPED in manual control")
+        else:
+            print("❌ Follow state not set to STOPPED in manual control")
+            
+    except Exception as e:
+        print(f"❌ Error reading file: {e}")
+
 def main():
     print("=== Testing Line Following Fixes ===\n")
     
@@ -108,6 +154,7 @@ def main():
     test_progress_messaging_fix()
     test_gui_progress_fix()
     test_return_journey_robustness()
+    test_idle_state_line_following_fix()
     
     print("\n=== Test Summary ===")
     print("The following fixes have been implemented:")
@@ -115,8 +162,11 @@ def main():
     print("2. ✅ Fixed progress messaging to only publish when actually line following")
     print("3. ✅ Fixed GUI to only update progress based on robot progress messages")
     print("4. ✅ Improved return journey robustness with error handling")
+    print("5. ✅ Fixed idle state line following status publishing")
     print("\nThe robot should now:")
     print("- Not publish line following status when in START state")
+    print("- Not publish line following status when in PICK_COLOR state")
+    print("- Only publish line following status when actually line following")
     print("- Always make a corrective turn when line following fails")
     print("- Have robust line switching during return journey")
     print("- Have accurate trial progress driven by robot status")

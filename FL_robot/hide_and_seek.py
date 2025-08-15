@@ -108,7 +108,7 @@ class HideAndSeekNode(Node):
         self.REVERSE_DURATION = 0.5  # Changed to 0.5s as requested
         self.SEARCH_TURN_SPEED = 0.6
         self.SEARCH_DURATION_LEFT = 2.7
-        self.SEARCH_DURATION_RIGHT = 5.5
+        self.SEARCH_DURATION_RIGHT = 5.4  # Changed from 5.5s to 5.4s as requested
         self.initial_camera_yaw = 0
         self.turn_duration = 7.5
         self.WAIT_DURATION = 120.0
@@ -279,7 +279,8 @@ class HideAndSeekNode(Node):
         """Publish current status to PC"""
         # Only publish line follow status if we're actually line following
         line_status_msg = String()
-        if self.main_state in [RobotState.FOLLOWING_START_LINE, RobotState.FOLLOWING_HIDING_LINE, RobotState.RETURNING_HOME]:
+        if (self.main_state in [RobotState.FOLLOWING_START_LINE, RobotState.FOLLOWING_HIDING_LINE, RobotState.RETURNING_HOME] and 
+            self.follow_state != FollowState.STOPPED):
             if self.follow_state == FollowState.TRACKING:
                 line_status_msg.data = "following"
             elif self.follow_state == FollowState.SEARCHING:
@@ -354,6 +355,7 @@ class HideAndSeekNode(Node):
         
         # Transition to color selection
         self.main_state = RobotState.PICK_COLOR
+        self.follow_state = FollowState.STOPPED  # Ensure line following is stopped
         self.get_logger().info("Transitioning to PICK_COLOR state.")
         
         progress_msg = String()
@@ -542,15 +544,10 @@ class HideAndSeekNode(Node):
                         self.action_start_time = time.time()
                     else:
                         self.get_logger().info("Right search complete, line not found.")
-                        self.line_lost_count += 1
-                        if self.line_lost_count >= self.MAX_LINE_LOSSES:
-                            # Add corrective turn to the left before ending line
-                            self.get_logger().info("Line following failed. Making corrective turn to left for 2.7s.")
-                            self.follow_state = FollowState.CORRECTIVE_TURN
-                            self.action_start_time = time.time()
-                        else:
-                            self.follow_state = FollowState.TRACKING
-                            self.stop_robot()
+                        # Line is officially lost - always do corrective turn to return to center
+                        self.get_logger().info("Line officially lost. Making corrective turn to left for 2.7s to return to center.")
+                        self.follow_state = FollowState.CORRECTIVE_TURN
+                        self.action_start_time = time.time()
 
         elif self.follow_state == FollowState.CORRECTIVE_TURN:
             # Corrective turn to the left for 2.7s after line following failure
@@ -717,6 +714,7 @@ class HideAndSeekNode(Node):
             self.get_logger().info("Manual control finished. Ready for next trial.")
             self.stop_robot()
             self.main_state = RobotState.START
+            self.follow_state = FollowState.STOPPED  # Ensure line following is stopped
         else:
              self.stop_robot()
 
