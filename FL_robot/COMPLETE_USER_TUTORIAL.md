@@ -430,6 +430,18 @@ Each trial records:
   ```
 - Restart robot system
 
+#### **"Package installation errors on robot"**
+- If you see errors like "Unable to locate package" during robot setup:
+  - This is normal for some Linux distributions
+  - The script will continue and install packages via pip instead
+  - Look for "⚠️" warnings - these are expected and not errors
+  - If the script completes successfully, you can proceed
+  - If the script fails completely, try running it again:
+    ```bash
+    cd /root/yahboomcar_ws/src/Janelia/FL_robot
+    ./first_boot_robot.sh
+    ```
+
 ### **Emergency Stop**
 
 **If the robot is moving unexpectedly:**

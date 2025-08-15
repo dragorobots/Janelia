@@ -77,6 +77,7 @@ echo "📦 Installing system dependencies..."
 # Detect package manager and install dependencies
 if command -v apt-get &> /dev/null; then
     # Ubuntu/Debian/Raspberry Pi
+    echo "   Installing core system packages..."
     sudo apt-get install -y \
         python3-tk \
         python3-dev \
@@ -85,14 +86,26 @@ if command -v apt-get &> /dev/null; then
         libsm6 \
         libxext6 \
         libxrender-dev \
-        libgomp1 \
-        libgthread-2.0-0 \
+        libgomp1
+
+    # Try to install optional packages (may not be available on all systems)
+    echo "   Installing optional system packages..."
+    sudo apt-get install -y libgthread-2.0-0 || echo "⚠️  libgthread-2.0-0 not available, continuing..."
+
+    echo "   Installing ROS2 message packages..."
+    sudo apt-get install -y \
         ros-$ROS_DISTRO-geometry-msgs \
         ros-$ROS_DISTRO-sensor-msgs \
-        ros-$ROS_DISTRO-std-msgs \
-        ros-$ROS_DISTRO-rosbridge-suite \
-        python3-rosbridge-suite \
-        python3-rosbridge-library
+        ros-$ROS_DISTRO-std-msgs
+
+    echo "   Installing ROS2 bridge packages..."
+    sudo apt-get install -y ros-$ROS_DISTRO-rosbridge-suite || echo "⚠️  ros-$ROS_DISTRO-rosbridge-suite not available, will install via pip..."
+
+    # Try to install Python ROS bridge packages, fall back to pip if not available
+    echo "   Installing Python ROS bridge packages..."
+    sudo apt-get install -y python3-rosbridge-suite || echo "⚠️  python3-rosbridge-suite not available, will install via pip..."
+    sudo apt-get install -y python3-rosbridge-library || echo "⚠️  python3-rosbridge-library not available, will install via pip..."
+
 elif command -v yum &> /dev/null; then
     # CentOS/RHEL
     sudo yum install -y \
@@ -133,6 +146,11 @@ pip3 install "flask>=2.0.0" "requests>=2.25.0"
 # ROS2 Python packages (if not already installed)
 echo "   Installing ROS2 Python packages..."
 pip3 install "roslibpy>=1.8.0"
+
+# Install ROS bridge packages via pip if system packages weren't available
+echo "   Installing ROS bridge packages via pip..."
+pip3 install "rosbridge-suite>=0.11.13" || echo "⚠️  rosbridge-suite installation failed, continuing..."
+pip3 install "rosbridge-library>=1.3.0" || echo "⚠️  rosbridge-library installation failed, continuing..."
 
 # Verify installations
 echo ""
