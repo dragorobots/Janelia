@@ -103,7 +103,7 @@ class HideAndSeekNode(Node):
         # Calculate duration for 90-degree turns (90° = π/2 radians)
         # At 0.6 rad/s, 90° takes: (π/2) / 0.6 ≈ 2.62 seconds
         self.SEARCH_DURATION_LEFT = 2.7   # 90 degrees left
-        self.SEARCH_DURATION_RIGHT = 2.7  # 90 degrees right
+        self.SEARCH_DURATION_RIGHT = 8.1  # 270 degrees right (3x more turning)
         self.initial_camera_yaw = 0
         self.turn_duration = 7.5
         self.WAIT_DURATION = 120.0
@@ -146,6 +146,7 @@ class HideAndSeekNode(Node):
         self.pc_line_color_hue = None
         self.pc_override_active = False
         self.pc_color_selection_mode = "auto"  # auto, manual
+        self.last_published_progress = None  # Track last published progress to prevent flickering
 
         # --- Main Control Loop ---
         self.timer = self.create_timer(0.1, self.main_loop)
@@ -323,7 +324,11 @@ class HideAndSeekNode(Node):
             progress_msg.data = "reset"
         elif self.main_state == RobotState.MANUAL_CONTROL:
             progress_msg.data = "manual_control"
-        self.progress_pub.publish(progress_msg)
+        
+        # Only publish if progress has changed to prevent flickering
+        if self.last_published_progress != progress_msg.data:
+            self.progress_pub.publish(progress_msg)
+            self.last_published_progress = progress_msg.data
 
     def execute_start_phase(self, frame):
         self.get_logger().info("STATE: START - Waiting for trial start command from PC.")
@@ -528,11 +533,11 @@ class HideAndSeekNode(Node):
                     self.get_logger().info(f"Searching: {elapsed_time:.1f}s / {duration_this_turn:.1f}s, direction: {'left' if self.search_direction == 1 else 'right'}")
                 else:
                     if self.search_direction == 1:
-                        self.get_logger().info("90° left search complete, switching to 90° right search.")
+                        self.get_logger().info("90° left search complete, switching to 270° right search.")
                         self.search_direction = -1
                         self.action_start_time = time.time()
                     else:
-                        self.get_logger().info("180° search complete, line not found.")
+                        self.get_logger().info("360° search complete (90° left + 270° right), line not found.")
                         self.follow_state = FollowState.STOPPED
                         self.stop_robot()
                         if not returning: 

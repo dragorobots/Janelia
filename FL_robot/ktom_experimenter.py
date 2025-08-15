@@ -1048,13 +1048,15 @@ Step-by-Step Process:
                     if "waiting_for_start" in progress_lower:
                         new_step = 0  # Waiting for start
                     elif "trial_started" in progress_lower:
-                        new_step = 1  # Trial started
+                        new_step = 1  # Trial started - beginning line following
                     elif "leaving_entrance" in progress_lower or "entrance" in progress_lower:
-                        new_step = 1  # Step 1: Leave entrance
-                    elif "intersection" in progress_lower:
-                        new_step = 2  # Step 2: Reach intersection
+                        new_step = 1  # Step 1: Leave entrance (line following)
                     elif "following_line" in progress_lower:
                         new_step = 3  # Step 3: Follow the line
+                    elif "searching_for_line" in progress_lower:
+                        new_step = 3  # Step 3: Still in line following phase
+                    elif "intersection" in progress_lower:
+                        new_step = 2  # Step 2: Reach intersection
                     elif "waiting_for_rat" in progress_lower:
                         new_step = 4  # Step 4: Wait at hiding spot
                     elif "turning_180" in progress_lower:
