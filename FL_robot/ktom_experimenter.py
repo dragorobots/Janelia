@@ -1104,70 +1104,96 @@ class KToMExperimenterGUI:
 
     def on_check_robot_status(self):
         """Check if hide_and_seek.sh is running on robot and bridge is active"""
-        if not self.robot_link or not self.robot_link.connected:
-            messagebox.showwarning("Warning", "Not connected to robot!")
-            return
-            
         try:
             import subprocess
             import socket
-            import requests
+            import threading
             
             robot_ip = self.robot_ip_var.get()
             
-            # Check 1: Can we reach the robot?
-            try:
-                socket.create_connection((robot_ip, 22), timeout=5)
-            except:
-                messagebox.showerror("Connection Error", 
-                    f"Cannot reach robot at {robot_ip} on SSH port 22.\n"
-                    "Please check network connection and robot power.")
+            # Validate IP address format
+            if not robot_ip or robot_ip.strip() == "":
+                messagebox.showerror("Error", "Please enter a valid robot IP address first.")
                 return
             
-            # Check 2: Is hide_and_seek.sh running?
-            try:
-                ssh_command = f"ssh root@{robot_ip} 'pgrep -f hide_and_seek'"
-                result = subprocess.run(ssh_command, shell=True, capture_output=True, text=True, timeout=10)
-                
-                hide_and_seek_running = result.returncode == 0 and result.stdout.strip()
-                
-            except subprocess.TimeoutExpired:
-                hide_and_seek_running = False
-                self.update_robot_status("⚠️ SSH timeout checking hide_and_seek process")
+            # Check if we're already connected via ROS bridge
+            bridge_connected = (self.robot_link and self.robot_link.connected)
             
-            # Check 3: Is bridge active (can we get progress updates)?
-            bridge_active = False
-            try:
-                # Try to get a progress update from the bridge
-                # This is a simple test - in a real implementation you might want to check specific topics
-                bridge_active = self.robot_link.connected
-            except:
-                bridge_active = False
-            
-            # Show results
+            # Show initial status
             status_message = "🤖 Robot Status Check Results:\n\n"
             
-            if hide_and_seek_running:
-                status_message += "✅ hide_and_seek.sh is running on robot\n"
-            else:
-                status_message += "❌ hide_and_seek.sh is NOT running on robot\n"
-                
-            if bridge_active:
-                status_message += "✅ Bridge is active and connected\n"
-            else:
-                status_message += "❌ Bridge is NOT active\n"
+            # Check 1: Can we reach the robot via SSH?
+            ssh_reachable = False
+            try:
+                socket.create_connection((robot_ip, 22), timeout=5)
+                ssh_reachable = True
+                status_message += "✅ Robot is reachable via SSH\n"
+            except (socket.timeout, socket.error, OSError):
+                status_message += "❌ Cannot reach robot via SSH (port 22)\n"
+                status_message += "   - Check if robot is powered on\n"
+                status_message += "   - Check network connection\n"
+                status_message += "   - Verify IP address is correct\n"
             
-            if hide_and_seek_running and bridge_active:
-                status_message += "\n🎉 Robot is ready for trials!"
-                messagebox.showinfo("Robot Status", status_message)
+            # Check 2: Is ROS bridge active?
+            if bridge_connected:
+                status_message += "✅ ROS bridge is connected\n"
             else:
-                status_message += "\n⚠️ Robot needs attention before trials."
-                if not hide_and_seek_running:
-                    status_message += "\n\nTo start hide_and_seek.sh on robot:\n"
-                    status_message += f"ssh root@{robot_ip}\n"
-                    status_message += "cd ~/yahboomcar_ws/src/Janelia/FL_robot\n"
-                    status_message += "./start_hide_and_seek.sh"
-                
+                status_message += "❌ ROS bridge is NOT connected\n"
+                status_message += "   - Click 'Connect to Robot' first\n"
+            
+            # Check 3: Is hide_and_seek.sh running? (only if SSH is reachable)
+            hide_and_seek_running = False
+            if ssh_reachable:
+                try:
+                    # Run SSH command in a separate thread to prevent GUI blocking
+                    def check_hide_and_seek():
+                        nonlocal hide_and_seek_running
+                        try:
+                            ssh_command = f"ssh root@{robot_ip} 'pgrep -f hide_and_seek'"
+                            result = subprocess.run(ssh_command, shell=True, capture_output=True, text=True, timeout=10)
+                            hide_and_seek_running = result.returncode == 0 and result.stdout.strip()
+                            
+                            # Update status message based on result
+                            if hide_and_seek_running:
+                                status_message += "✅ hide_and_seek.sh is running on robot\n"
+                            else:
+                                status_message += "❌ hide_and_seek.sh is NOT running on robot\n"
+                                status_message += "   - Start it with: ssh root@" + robot_ip + "\n"
+                                status_message += "   - Then run: cd ~/yahboomcar_ws/src/Janelia/FL_robot\n"
+                                status_message += "   - Then run: ./start_hide_and_seek.sh\n"
+                            
+                            # Show final status
+                            if hide_and_seek_running and bridge_connected:
+                                status_message += "\n🎉 Robot is ready for trials!"
+                                self.root.after(0, lambda: messagebox.showinfo("Robot Status", status_message))
+                            else:
+                                status_message += "\n⚠️ Robot needs attention before trials."
+                                self.root.after(0, lambda: messagebox.showwarning("Robot Status", status_message))
+                                
+                        except subprocess.TimeoutExpired:
+                            status_message += "⚠️ SSH command timed out\n"
+                            status_message += "\n⚠️ Robot needs attention before trials."
+                            self.root.after(0, lambda: messagebox.showwarning("Robot Status", status_message))
+                        except Exception as e:
+                            status_message += f"⚠️ Error checking hide_and_seek: {str(e)}\n"
+                            status_message += "\n⚠️ Robot needs attention before trials."
+                            self.root.after(0, lambda: messagebox.showwarning("Robot Status", status_message))
+                    
+                    # Start the SSH check thread
+                    ssh_thread = threading.Thread(target=check_hide_and_seek, daemon=True)
+                    ssh_thread.start()
+                    
+                    # Show immediate status while SSH check is running
+                    status_message += "⏳ Checking hide_and_seek.sh status...\n"
+                    messagebox.showinfo("Robot Status", status_message)
+                    
+                except Exception as e:
+                    status_message += f"⚠️ Error starting SSH check: {str(e)}\n"
+                    status_message += "\n⚠️ Robot needs attention before trials."
+                    messagebox.showwarning("Robot Status", status_message)
+            else:
+                # If SSH is not reachable, show status without hide_and_seek check
+                status_message += "\n⚠️ Cannot check hide_and_seek.sh status (SSH unreachable)"
                 messagebox.showwarning("Robot Status", status_message)
                 
         except Exception as e:
