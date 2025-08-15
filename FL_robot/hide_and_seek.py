@@ -253,7 +253,7 @@ class HideAndSeekNode(Node):
             self.execute_start_phase(display_view)
         elif self.main_state == RobotState.PICK_COLOR:
             self.execute_pick_color_phase(display_view)
-        elif self.main_state in [RobotState.FOLLOWING_START_LINE, RobotState.AT_INTERSECTION, RobotState.FOLLOWING_TARGET_LINE]:
+        elif self.main_state in [RobotState.FOLLOWING_START_LINE, RobotState.FOLLOWING_TARGET_LINE]:
             mask_display = self.execute_line_follow(display_view, returning=(self.main_state == RobotState.RETURNING_HOME))
             if mask_display is not None and mask_display.size > 0:
                 # Ensure both images have the same height before concatenating
@@ -358,11 +358,6 @@ class HideAndSeekNode(Node):
         key = self.getKey()
         if key == 's':
             self.start_trial()
-        
-        # Publish status to PC
-        progress_msg = String()
-        progress_msg.data = "waiting_for_start"
-        self.progress_pub.publish(progress_msg)
 
     def start_trial(self):
         """Start the trial - called from PC or manual key press"""
@@ -800,8 +795,22 @@ class HideAndSeekNode(Node):
             self.target_hsv_range = (lower, upper)
             
             self.get_logger().info(f"Color selected. Avg HSV: [{h}, {s}, {v}]. Range: L={lower}, U={upper}")
+            
+            # For manual mode, also set start line to red (hue 0) - this should be configurable
+            start_h = 0  # Red hue
+            start_lower = np.array([max(0, start_h - h_margin), max(40, s - s_margin), max(40, v - v_margin)])
+            start_upper = np.array([min(179, start_h + h_margin), min(255, s + s_margin), min(255, v + v_margin)])
+            self.start_line_hsv_range = (start_lower, start_upper)
+            
+            self.get_logger().info(f"Manual colors selected. Target Hue: {h}, Start Hue: {start_h}")
             self.main_state = RobotState.FOLLOWING_START_LINE
             self.follow_state = FollowState.TRACKING
+            self.intersection_detected = False
+            
+            # Publish progress update
+            progress_msg = String()
+            progress_msg.data = "following_start_line"
+            self.progress_pub.publish(progress_msg)
 
     def lidar_callback(self, msg):
         if self.main_state != RobotState.WAITING_FOR_RAT: 
