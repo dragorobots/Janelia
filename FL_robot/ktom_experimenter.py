@@ -521,64 +521,89 @@ class KToMExperimenterGUI:
         
         # === LEFT PANEL: CONTROLS ===
         
-        # Connection frame
+        # Connection frame with inline layout
         connection_frame = ttk.LabelFrame(left_panel, text="1. Connect to Robot", padding=10)
         connection_frame.pack(fill='x', pady=5)
         
-        # Robot IP input
-        ttk.Label(connection_frame, text="Robot IP Address:").pack(anchor='w')
+        # Create inline frame for robot status bar
+        status_bar_frame = ttk.Frame(connection_frame)
+        status_bar_frame.pack(fill='x', pady=5)
+        
+        # Robot IP input (inline)
+        ttk.Label(status_bar_frame, text="IP:").pack(side='left', padx=(0, 5))
         self.robot_ip_var = tk.StringVar(value="10.0.0.234")
-        self.robot_ip_entry = ttk.Entry(connection_frame, textvariable=self.robot_ip_var)
-        self.robot_ip_entry.pack(fill='x', pady=2)
+        self.robot_ip_entry = ttk.Entry(status_bar_frame, textvariable=self.robot_ip_var, width=12)
+        self.robot_ip_entry.pack(side='left', padx=(0, 10))
         
-        # Connection button
-        self.connect_button = ttk.Button(connection_frame, text="Connect to Robot", 
+        # Connection button (inline)
+        self.connect_button = ttk.Button(status_bar_frame, text="Connect", 
                                         command=self.on_connect_robot)
-        self.connect_button.pack(pady=5)
+        self.connect_button.pack(side='left', padx=(0, 10))
         
-        # Check robot status button
-        self.check_robot_status_button = ttk.Button(connection_frame, text="🔍 Check Robot Status", 
+        # Check robot status button (inline)
+        self.check_robot_status_button = ttk.Button(status_bar_frame, text="Check Status", 
                                                    command=self.on_check_robot_status)
-        self.check_robot_status_button.pack(pady=5)
+        self.check_robot_status_button.pack(side='left', padx=(0, 10))
         
-        # Status display
-        self.robot_status_label = ttk.Label(connection_frame, text="Status: Disconnected", 
+        # Status display (inline)
+        self.robot_status_label = ttk.Label(status_bar_frame, text="Disconnected", 
                                            foreground='red')
-        self.robot_status_label.pack(pady=5)
+        self.robot_status_label.pack(side='left', padx=(0, 10))
         
-        # Abort status indicator
-        self.abort_status_label = ttk.Label(connection_frame, text="🚨 ABORT MODE: INACTIVE", 
-                                           foreground='green', font=('Arial', 10, 'bold'))
-        self.abort_status_label.pack(pady=5)
+        # Abort status indicator (inline)
+        self.abort_status_label = ttk.Label(status_bar_frame, text="ABORT: INACTIVE", 
+                                           foreground='green', font=('Arial', 9, 'bold'))
+        self.abort_status_label.pack(side='left', padx=(0, 10))
         
-        # Target spot frame
+        # Abort mission button (inline, top right)
+        self.abort_button = ttk.Button(status_bar_frame, text="🚨 ABORT MISSION", 
+                                      command=self.on_abort_mission)
+        self.abort_button.pack(side='right', padx=(10, 0))
+        
+        # Style the abort button to be red with white text
+        try:
+            style = ttk.Style()
+            style.configure('Emergency.TButton', 
+                          background='red', 
+                          foreground='white',
+                          font=('Arial', 10, 'bold'))
+            self.abort_button.configure(style='Emergency.TButton')
+        except:
+            # Fallback if styling fails
+            pass
+        
+        # Target spot frame with inline layout
         target_frame = ttk.LabelFrame(left_panel, text="3. Send Target Hiding Spot", padding=10)
         target_frame.pack(fill='x', pady=5)
         
-        # Manual override checkbox
+        # Create inline frame for target spot controls
+        target_controls_frame = ttk.Frame(target_frame)
+        target_controls_frame.pack(fill='x', pady=5)
+        
+        # Target spot selection (inline)
+        ttk.Label(target_controls_frame, text="Target:").pack(side='left', padx=(0, 5))
+        self.target_spot_var = tk.StringVar(value="A")
+        target_combo = ttk.Combobox(target_controls_frame, textvariable=self.target_spot_var, 
+                                   values=["A", "B", "C", "D"], state='readonly', width=8)
+        target_combo.pack(side='left', padx=(0, 10))
+        
+        # Manual override checkbox (inline, next to dropdown)
         self.manual_override_var = tk.BooleanVar(value=False)
-        self.manual_override_check = ttk.Checkbutton(target_frame, 
-                                                    text="Manual hiding spot selection override", 
+        self.manual_override_check = ttk.Checkbutton(target_controls_frame, 
+                                                    text="Manual override", 
                                                     variable=self.manual_override_var,
                                                     command=self.on_manual_override_toggle)
-        self.manual_override_check.pack(anchor='w', pady=5)
+        self.manual_override_check.pack(side='left', padx=(0, 10))
         
-        # Target spot selection
-        ttk.Label(target_frame, text="Target Hiding Spot:").pack(anchor='w')
-        self.target_spot_var = tk.StringVar(value="A")
-        target_combo = ttk.Combobox(target_frame, textvariable=self.target_spot_var, 
-                                   values=["A", "B", "C", "D"], state='readonly')
-        target_combo.pack(fill='x', pady=2)
-        
-        # Send target button
-        self.send_target_button = ttk.Button(target_frame, text="Send Target Spot", 
-                                            command=self.on_send_target)
-        self.send_target_button.pack(pady=5)
-        
-        # Auto-send target button (uses k-ToM recommendation)
-        self.auto_send_target_button = ttk.Button(target_frame, text="🤖 Auto-Send k-ToM Target", 
+        # Auto-send target button (inline, right of manual toggle)
+        self.auto_send_target_button = ttk.Button(target_controls_frame, text="Auto-Send k-ToM", 
                                                   command=self.on_auto_send_target, style='Accent.TButton')
-        self.auto_send_target_button.pack(pady=5)
+        self.auto_send_target_button.pack(side='left', padx=(0, 10))
+        
+        # Send target button (inline)
+        self.send_target_button = ttk.Button(target_controls_frame, text="Send Target", 
+                                            command=self.on_send_target)
+        self.send_target_button.pack(side='left')
         
         # Mode selection frame with 3 columns
         mode_frame = ttk.LabelFrame(left_panel, text="Mode Selections", padding=10)
@@ -632,50 +657,6 @@ class KToMExperimenterGUI:
                                              command=self.on_manual_found, style='Accent.TButton')
         self.manual_found_button.pack(pady=10)
         
-        # Manual driving frame
-        drive_frame = ttk.LabelFrame(left_panel, text="Manual Driving", padding=10)
-        drive_frame.pack(fill='x', pady=5)
-        
-        # Speed controls
-        ttk.Label(drive_frame, text="Linear Speed (m/s):").pack(anchor='w')
-        self.linear_speed_var = tk.DoubleVar(value=0.2)
-        self.linear_speed_spin = ttk.Spinbox(drive_frame, from_=-1.0, to=1.0, increment=0.1, 
-                                           textvariable=self.linear_speed_var)
-        self.linear_speed_spin.pack(fill='x', pady=2)
-        
-        ttk.Label(drive_frame, text="Angular Speed (rad/s):").pack(anchor='w')
-        self.angular_speed_var = tk.DoubleVar(value=0.0)
-        self.angular_speed_spin = ttk.Spinbox(drive_frame, from_=-2.0, to=2.0, increment=0.1, 
-                                           textvariable=self.angular_speed_var)
-        self.angular_speed_spin.pack(fill='x', pady=2)
-        
-        # Send velocity button
-        self.send_velocity_button = ttk.Button(drive_frame, text="Send Velocity Command", 
-                                              command=self.on_send_velocity)
-        self.send_velocity_button.pack(pady=5)
-        
-        # Stop button
-        self.stop_button = ttk.Button(drive_frame, text="STOP", 
-                                     command=self.on_stop_robot, style='Accent.TButton')
-        self.stop_button.pack(pady=5)
-        
-        # Emergency Abort button
-        self.abort_button = ttk.Button(drive_frame, text="🚨 ABORT MISSION", 
-                                      command=self.on_abort_mission)
-        self.abort_button.pack(pady=10)
-        
-        # Style the abort button to be more prominent
-        try:
-            style = ttk.Style()
-            style.configure('Emergency.TButton', 
-                          background='red', 
-                          foreground='white',
-                          font=('Arial', 12, 'bold'))
-            self.abort_button.configure(style='Emergency.TButton')
-        except:
-            # Fallback if styling fails
-            pass
-        
         # Robot status frame
         status_frame = ttk.LabelFrame(left_panel, text="Robot Status", padding=10)
         status_frame.pack(fill='both', expand=True, pady=5)
@@ -687,6 +668,26 @@ class KToMExperimenterGUI:
         
         self.robot_status_text.pack(side='left', fill='both', expand=True)
         status_scrollbar.pack(side='right', fill='y')
+        
+        # Start Trial button (in line with robot status window)
+        start_trial_frame = ttk.Frame(left_panel)
+        start_trial_frame.pack(fill='x', pady=10)
+        
+        # Big green start trial button
+        self.start_trial_button = ttk.Button(start_trial_frame, text="🚀 START TRIAL", 
+                                           command=self.on_start_trial, style='StartTrial.TButton')
+        self.start_trial_button.pack(fill='x', pady=5)
+        
+        # Style the start trial button to be big and green
+        try:
+            style = ttk.Style()
+            style.configure('StartTrial.TButton', 
+                          background='green', 
+                          foreground='white',
+                          font=('Arial', 16, 'bold'))
+        except:
+            # Fallback if styling fails
+            pass
         
         # === RIGHT PANEL: INSTRUCTIONS & PROGRESS ===
         
@@ -736,7 +737,7 @@ Step-by-Step Process:
                                       font=('Arial', 9), justify='left', wraplength=300)
         instructions_label.pack(anchor='w', pady=5)
         
-        # Trial Progress frame
+        # Trial Progress frame (static checkbox list only)
         progress_frame = ttk.LabelFrame(right_panel, text="🎯 Trial Progress", padding=10)
         progress_frame.pack(fill='x', pady=5)
         
@@ -772,33 +773,6 @@ Step-by-Step Process:
                              font=('Arial', 9), foreground='gray')
             label.pack(side='left', fill='x', expand=True)
             self.progress_labels.append(label)
-        
-        # Current step indicator
-        self.current_step_var = tk.StringVar(value="Waiting for trial to start...")
-        self.current_step_label = ttk.Label(progress_frame, textvariable=self.current_step_var,
-                                           font=('Arial', 10, 'bold'), foreground='blue')
-        self.current_step_label.pack(pady=5)
-        
-        # === BIG GREEN START TRIAL BUTTON ===
-        # Create a frame for the start trial button in the right panel
-        start_trial_frame = ttk.Frame(right_panel)
-        start_trial_frame.pack(fill='x', pady=10)
-        
-        # Big green start trial button
-        self.start_trial_button = ttk.Button(start_trial_frame, text="🚀 START TRIAL", 
-                                           command=self.on_start_trial, style='StartTrial.TButton')
-        self.start_trial_button.pack(fill='x', pady=5)
-        
-        # Style the start trial button to be big and green
-        try:
-            style = ttk.Style()
-            style.configure('StartTrial.TButton', 
-                          background='green', 
-                          foreground='white',
-                          font=('Arial', 16, 'bold'))
-        except:
-            # Fallback if styling fails
-            pass
         
     def on_k_level_change(self, event):
         if self.k_level_var.get() == 0:
@@ -1090,7 +1064,7 @@ Step-by-Step Process:
                     self.robot_status = "Connected"
                     self.robot_status_label.config(text="Status: Connected", foreground='green')
                     self.connect_button.config(text="Disconnect")
-                    self.abort_status_label.config(text="🚨 ABORT MODE: INACTIVE", foreground='green')
+                    self.abort_status_label.config(text="ABORT: INACTIVE", foreground='green')
                     self.update_robot_status("Successfully connected to robot")
                     
                     # Reset progress tracking to prevent flashing
@@ -1111,7 +1085,7 @@ Step-by-Step Process:
             self.robot_link = None
             self.robot_status = "Disconnected"
             self.robot_status_label.config(text="Status: Disconnected", foreground='red')
-            self.connect_button.config(text="Connect to Robot")
+            self.connect_button.config(text="Connect")
             self.update_robot_status("Disconnected from robot")
 
     def on_send_target(self):
@@ -1190,27 +1164,13 @@ Step-by-Step Process:
         else:
             messagebox.showwarning("Warning", "Not connected to robot!")
 
-    def on_send_velocity(self):
-        if self.robot_link and self.robot_link.connected:
-            linear = self.linear_speed_var.get()
-            angular = self.angular_speed_var.get()
-            self.robot_link.send_cmdvel(linear, angular)
-            self.update_robot_status(f"Sent velocity: linear={linear}, angular={angular}")
-        else:
-            messagebox.showwarning("Warning", "Not connected to robot!")
 
-    def on_stop_robot(self):
-        if self.robot_link and self.robot_link.connected:
-            self.robot_link.send_cmdvel(0.0, 0.0)
-            self.update_robot_status("Sent STOP command")
-        else:
-            messagebox.showwarning("Warning", "Not connected to robot!")
             
     def on_abort_mission(self):
         """Emergency abort - stop all robot operations and kill hide_and_seek process"""
         if self.robot_link and self.robot_link.connected:
             # Update abort status indicator
-            self.abort_status_label.config(text="🚨 ABORT MODE: ACTIVE", foreground='red')
+            self.abort_status_label.config(text="ABORT: ACTIVE", foreground='red')
             
             # Send emergency stop command
             self.robot_link.send_cmdvel(0.0, 0.0)
@@ -1457,16 +1417,12 @@ Step-by-Step Process:
                     # Current step
                     var.set(False)
                     label.config(foreground='orange')
-                    self.current_step_var.set(f"Current: {self.progress_steps[i]}")
                 else:
                     # Future steps
                     var.set(False)
                     label.config(foreground='gray')
             
-            if step_number == 0:
-                self.current_step_var.set("Waiting for trial to start...")
-            elif step_number >= len(self.progress_steps):
-                self.current_step_var.set("Trial completed!")
+
 
     def validate_search_sequence(self, sequence):
         """Validate search sequence format (A-D or 1-4, comma-separated)"""
