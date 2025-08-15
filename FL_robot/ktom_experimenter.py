@@ -1033,28 +1033,22 @@ Step-by-Step Process:
                         new_step = 0  # Waiting for start
                     elif "trial_started" in progress_lower:
                         new_step = 1  # Trial started - beginning line following
-                    elif "leaving_entrance" in progress_lower or "entrance" in progress_lower:
-                        new_step = 1  # Step 1: Leave entrance (line following)
+                    elif "pick_color_phase" in progress_lower:
+                        new_step = 1  # Step 1: Pick color (manual mode)
                     elif "following_start_line" in progress_lower:
                         new_step = 1  # Step 1: Following start line to intersection
-                    elif "at_intersection_centering" in progress_lower:
-                        new_step = 2  # Step 2: At intersection, centering
-                    elif "following_target_line" in progress_lower:
-                        new_step = 3  # Step 3: Following target line to hiding spot
-                    elif "following_line" in progress_lower:
-                        new_step = 3  # Step 3: Follow the line (legacy)
-                    elif "searching_for_line" in progress_lower:
-                        new_step = 3  # Step 3: Still in line following phase
-                    elif "intersection" in progress_lower:
-                        new_step = 2  # Step 2: Reach intersection (legacy)
+                    elif "selecting_hiding_spot" in progress_lower:
+                        new_step = 2  # Step 2: At intersection, selecting hiding spot
+                    elif "following_hiding_line" in progress_lower:
+                        new_step = 3  # Step 3: Following hiding line to hiding spot
                     elif "waiting_for_rat" in progress_lower:
                         new_step = 4  # Step 4: Wait at hiding spot
                     elif "turning_180" in progress_lower:
-                        new_step = 5  # Step 5: Wait 10s, turn 180°
+                        new_step = 5  # Step 5: Turn 180° after rat detection
                     elif "returning_home" in progress_lower:
-                        new_step = 7  # Step 7: Return to start
+                        new_step = 6  # Step 6: Return to start
                     elif "reset" in progress_lower:
-                        new_step = 8  # Step 8: Wait for new command
+                        new_step = 7  # Step 7: Reset for next trial
                     
                     # Only update if step actually changed
                     if new_step != current_step:
