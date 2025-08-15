@@ -57,6 +57,7 @@ class FollowState:
     SEARCHING = 2
     STOPPED = 3
     CORRECTIVE_TURN = 4 # Added for corrective turn
+    FINAL_BACKUP = 5 # Added for final backup
 
 class HideAndSeekNode(Node):
     """
@@ -289,6 +290,8 @@ class HideAndSeekNode(Node):
                 line_status_msg.data = "reversing"
             elif self.follow_state == FollowState.CORRECTIVE_TURN:
                 line_status_msg.data = "corrective_turn"
+            elif self.follow_state == FollowState.FINAL_BACKUP:
+                line_status_msg.data = "final_backup"
             else:
                 line_status_msg.data = "stopped"
             self.line_follow_status_pub.publish(line_status_msg)
@@ -550,14 +553,27 @@ class HideAndSeekNode(Node):
                         self.action_start_time = time.time()
 
         elif self.follow_state == FollowState.CORRECTIVE_TURN:
-            # Corrective turn to the left for 2.7s after line following failure
+            # Corrective turn to the left for 3.1s after line following failure
             elapsed_time = time.time() - self.action_start_time
-            if elapsed_time < 2.7:
+            if elapsed_time < 3.1:
                 twist.angular.z = self.SEARCH_TURN_SPEED  # Turn left
                 self.cmd_vel_pub.publish(twist)
-                self.get_logger().info(f"Corrective turn: {elapsed_time:.1f}s / 2.7s")
+                self.get_logger().info(f"Corrective turn: {elapsed_time:.1f}s / 3.1s")
             else:
-                self.get_logger().info("Corrective turn complete. Ending line following.")
+                self.get_logger().info("Corrective turn complete. Starting final backup for positioning.")
+                self.stop_robot()
+                self.follow_state = FollowState.FINAL_BACKUP
+                self.action_start_time = time.time()
+
+        elif self.follow_state == FollowState.FINAL_BACKUP:
+            # Final backup for 0.5s for better positioning (not searching)
+            elapsed_time = time.time() - self.action_start_time
+            if elapsed_time < 0.5:
+                twist.linear.x = self.REVERSE_SPEED
+                self.cmd_vel_pub.publish(twist)
+                self.get_logger().info(f"Final backup: {elapsed_time:.1f}s / 0.5s")
+            else:
+                self.get_logger().info("Final backup complete. Ending line following.")
                 self.stop_robot()
                 self.handle_line_ended()
 
@@ -596,7 +612,10 @@ class HideAndSeekNode(Node):
             
         elif self.main_state == RobotState.RETURNING_HOME:
             # During return journey, we need to switch line colors at intersection
-            if self.current_line_hsv_range == self.hiding_line_hsv_range:
+            if (self.current_line_hsv_range is not None and 
+                self.hiding_line_hsv_range is not None and
+                np.array_equal(self.current_line_hsv_range[0], self.hiding_line_hsv_range[0]) and
+                np.array_equal(self.current_line_hsv_range[1], self.hiding_line_hsv_range[1])):
                 # We were following hiding line, now switch to start line
                 self.get_logger().info("Reached intersection during return. Switching to start line.")
                 if self.start_line_hsv_range is not None:

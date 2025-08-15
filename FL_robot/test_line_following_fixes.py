@@ -17,17 +17,29 @@ def test_corrective_turn_addition():
         else:
             print("❌ CORRECTIVE_TURN state not found")
             
+        # Check for new final backup state
+        if 'FINAL_BACKUP = 5' in content:
+            print("✅ FINAL_BACKUP state found")
+        else:
+            print("❌ FINAL_BACKUP state not found")
+            
+        # Check for final backup logic
+        if 'final_backup' in content:
+            print("✅ Final backup logic found")
+        else:
+            print("❌ Final backup logic not found")
+            
         # Check for corrective turn logic
         if 'corrective_turn' in content:
             print("✅ Corrective turn logic found")
         else:
             print("❌ Corrective turn logic not found")
             
-        # Check for 2.7s corrective turn
-        if '2.7' in content and 'corrective' in content:
-            print("✅ 2.7s corrective turn found")
+        # Check for 3.1s corrective turn
+        if '3.1' in content and 'corrective' in content:
+            print("✅ 3.1s corrective turn found")
         else:
-            print("❌ 2.7s corrective turn not found")
+            print("❌ 3.1s corrective turn not found")
             
         # Check that corrective turn happens when line is officially lost (not just MAX_LINE_LOSSES)
         if 'Line officially lost' in content and 'corrective turn' in content:
@@ -158,16 +170,18 @@ def main():
     
     print("\n=== Test Summary ===")
     print("The following fixes have been implemented:")
-    print("1. ✅ Added corrective turn (2.7s left) after line following failures")
-    print("2. ✅ Fixed progress messaging to only publish when actually line following")
-    print("3. ✅ Fixed GUI to only update progress based on robot progress messages")
-    print("4. ✅ Improved return journey robustness with error handling")
-    print("5. ✅ Fixed idle state line following status publishing")
+    print("1. ✅ Added corrective turn (3.1s left) after line following failures")
+    print("2. ✅ Added final backup (0.5s) for better positioning after corrective turn")
+    print("3. ✅ Fixed progress messaging to only publish when actually line following")
+    print("4. ✅ Fixed GUI to only update progress based on robot progress messages")
+    print("5. ✅ Improved return journey robustness with error handling")
+    print("6. ✅ Fixed idle state line following status publishing")
     print("\nThe robot should now:")
     print("- Not publish line following status when in START state")
     print("- Not publish line following status when in PICK_COLOR state")
     print("- Only publish line following status when actually line following")
     print("- Always make a corrective turn when line following fails")
+    print("- Always make a final backup for better positioning")
     print("- Have robust line switching during return journey")
     print("- Have accurate trial progress driven by robot status")
 

@@ -29,8 +29,9 @@ self.follow_state = FollowState.STOPPED  # Ensure line following is stopped
 1. Reverse for 0.5 seconds
 2. Turn left for 2.7 seconds (searching for line)
 3. Turn right for 5.4 seconds (searching for line)
-4. **Line officially lost** - Turn left for 2.7 seconds (corrective turn to return to center, not searching)
-5. Then transition to the next state
+4. **Line officially lost** - Turn left for 3.1 seconds (corrective turn to return to center, not searching)
+5. **Final positioning** - Reverse for 0.5 seconds (for better positioning, not searching)
+6. Then transition to the next state
 
 **Code Changes**:
 ```python
@@ -40,6 +41,7 @@ class FollowState:
     SEARCHING = 2
     STOPPED = 3
     CORRECTIVE_TURN = 4  # Added for corrective turn
+    FINAL_BACKUP = 5     # Added for final backup
 
 # Search durations:
 self.SEARCH_DURATION_LEFT = 2.7   # Left search duration
@@ -56,15 +58,27 @@ elif self.follow_state == FollowState.SEARCHING:
         else:
             # Right search complete, line not found
             # Line is officially lost - always do corrective turn to return to center
-            self.get_logger().info("Line officially lost. Making corrective turn to left for 2.7s to return to center.")
+            self.get_logger().info("Line officially lost. Making corrective turn to left for 3.1s to return to center.")
             self.follow_state = FollowState.CORRECTIVE_TURN
             self.action_start_time = time.time()
 
 elif self.follow_state == FollowState.CORRECTIVE_TURN:
-    # Corrective turn to the left for 2.7s after line following failure
+    # Corrective turn to the left for 3.1s after line following failure
     elapsed_time = time.time() - self.action_start_time
-    if elapsed_time < 2.7:
+    if elapsed_time < 3.1:
         twist.angular.z = self.SEARCH_TURN_SPEED  # Turn left
+        self.cmd_vel_pub.publish(twist)
+    else:
+        self.get_logger().info("Corrective turn complete. Starting final backup for positioning.")
+        self.stop_robot()
+        self.follow_state = FollowState.FINAL_BACKUP
+        self.action_start_time = time.time()
+
+elif self.follow_state == FollowState.FINAL_BACKUP:
+    # Final backup for 0.5s for better positioning (not searching)
+    elapsed_time = time.time() - self.action_start_time
+    if elapsed_time < 0.5:
+        twist.linear.x = self.REVERSE_SPEED
         self.cmd_vel_pub.publish(twist)
     else:
         self.stop_robot()
@@ -122,8 +136,9 @@ elif self.main_state == RobotState.RETURNING_HOME:
   1. Reverse for 0.5 seconds
   2. Turn left for 2.7 seconds (searching for line)
   3. Turn right for 5.4 seconds (searching for line)
-  4. **Line officially lost** - Turn left for 2.7 seconds (corrective turn to return to center, not searching)
-  5. Then transition to the next state
+  4. **Line officially lost** - Turn left for 3.1 seconds (corrective turn to return to center, not searching)
+  5. **Final positioning** - Reverse for 0.5 seconds (for better positioning, not searching)
+  6. Then transition to the next state
 
 ### Trial Progress Accuracy
 - Trial progress is now driven entirely by robot progress messages
@@ -159,8 +174,9 @@ python test_line_following_fixes.py
 ```
 
 All tests should pass, confirming that:
-- ✅ Corrective turn state and logic are implemented correctly
-- ✅ Line following follows the correct pattern: reverse → search left → search right → corrective turn
+- ✅ Corrective turn state and logic are implemented correctly (3.1s duration)
+- ✅ Final backup state and logic are implemented correctly (0.5s duration)
+- ✅ Line following follows the correct pattern: reverse → search left → search right → corrective turn → final backup
 - ✅ Progress messaging is properly controlled
 - ✅ GUI progress is driven by robot messages only
 - ✅ Return journey robustness is improved
