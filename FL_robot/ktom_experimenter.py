@@ -477,6 +477,18 @@ class KToMExperimenterGUI:
                                        command=self.on_submit_button_clicked)
         self.submit_button.pack(pady=10)
         
+        # Export data button with indicator
+        export_frame = ttk.Frame(input_frame)
+        export_frame.pack(pady=5)
+        
+        self.export_button = ttk.Button(export_frame, text="Export Data to CSV", 
+                                       command=self.on_generate_log_clicked)
+        self.export_button.pack(side='left', padx=(0, 10))
+        
+        export_indicator = ttk.Label(export_frame, text="📊 Press when all trials are complete", 
+                                    font=('Arial', 9), foreground='blue')
+        export_indicator.pack(side='left')
+        
         # Trial log frame
         log_frame = ttk.LabelFrame(parent, text="Trial Log", padding=10)
         log_frame.pack(fill='both', expand=True, padx=10, pady=5)
@@ -502,11 +514,6 @@ class KToMExperimenterGUI:
         
         self.model_state_text.pack(side='left', fill='both', expand=True)
         model_scrollbar.pack(side='right', fill='y')
-        
-        # Generate log button
-        self.generate_log_button = ttk.Button(parent, text="Generate Trial Log (.csv)", 
-                                            command=self.on_generate_log_clicked)
-        self.generate_log_button.pack(pady=10)
         
     def create_robot_control_tab(self, parent):
         # Title
