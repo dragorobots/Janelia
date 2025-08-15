@@ -250,6 +250,9 @@ class HideAndSeekNode(Node):
         elif self.main_state in [RobotState.FOLLOWING_LINE, RobotState.RETURNING_HOME]:
             mask_display = self.execute_line_follow(display_view, returning=(self.main_state == RobotState.RETURNING_HOME))
             if mask_display is not None and mask_display.size > 0:
+                # Ensure both images have the same height before concatenating
+                if mask_display.shape[0] != display_view.shape[0]:
+                    mask_display = cv2.resize(mask_display, (mask_display.shape[1], display_view.shape[0]))
                 display_view = cv2.hconcat([display_view, mask_display])
         elif self.main_state == RobotState.WAITING_FOR_RAT:
             self.execute_wait_for_rat(display_view)

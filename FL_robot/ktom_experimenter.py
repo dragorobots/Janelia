@@ -295,15 +295,15 @@ class KToMExperimenterGUI:
         notebook.add(setup_frame, text="Setup")
         self.create_setup_tab(setup_frame)
         
-        # Trial tab
-        trial_frame = ttk.Frame(notebook)
-        notebook.add(trial_frame, text="Trial Execution")
-        self.create_trial_tab(trial_frame)
-        
         # Robot Control tab
         robot_frame = ttk.Frame(notebook)
         notebook.add(robot_frame, text="Robot Control")
         self.create_robot_control_tab(robot_frame)
+        
+        # Trial tab
+        trial_frame = ttk.Frame(notebook)
+        notebook.add(trial_frame, text="Log Trial Data")
+        self.create_trial_tab(trial_frame)
         
     def create_setup_tab(self, parent):
         # Title
@@ -504,12 +504,26 @@ class KToMExperimenterGUI:
         
     def create_robot_control_tab(self, parent):
         # Title
-        title_label = ttk.Label(parent, text="3. Robot Control", font=('Arial', 16, 'bold'))
+        title_label = ttk.Label(parent, text="2. Robot Control", font=('Arial', 16, 'bold'))
         title_label.pack(pady=10)
         
+        # Create main container with left and right panels
+        main_container = ttk.Frame(parent)
+        main_container.pack(fill='both', expand=True, padx=10, pady=5)
+        
+        # Left panel for controls
+        left_panel = ttk.Frame(main_container)
+        left_panel.pack(side='left', fill='both', expand=True, padx=(0, 10))
+        
+        # Right panel for instructions and progress
+        right_panel = ttk.Frame(main_container)
+        right_panel.pack(side='right', fill='y', padx=(10, 0))
+        
+        # === LEFT PANEL: CONTROLS ===
+        
         # Connection frame
-        connection_frame = ttk.LabelFrame(parent, text="Robot Connection", padding=10)
-        connection_frame.pack(fill='x', padx=10, pady=5)
+        connection_frame = ttk.LabelFrame(left_panel, text="1. Connect to Robot", padding=10)
+        connection_frame.pack(fill='x', pady=5)
         
         # Robot IP input
         ttk.Label(connection_frame, text="Robot IP Address:").pack(anchor='w')
@@ -537,106 +551,90 @@ class KToMExperimenterGUI:
                                            foreground='green', font=('Arial', 10, 'bold'))
         self.abort_status_label.pack(pady=5)
         
-        # Robot Control frame
-        control_frame = ttk.LabelFrame(parent, text="Robot Commands", padding=10)
-        control_frame.pack(fill='x', padx=10, pady=5)
+        # Target spot frame
+        target_frame = ttk.LabelFrame(left_panel, text="3. Send Target Hiding Spot", padding=10)
+        target_frame.pack(fill='x', pady=5)
+        
+        # Manual override checkbox
+        self.manual_override_var = tk.BooleanVar(value=False)
+        self.manual_override_check = ttk.Checkbutton(target_frame, 
+                                                    text="Manual hiding spot selection override", 
+                                                    variable=self.manual_override_var,
+                                                    command=self.on_manual_override_toggle)
+        self.manual_override_check.pack(anchor='w', pady=5)
         
         # Target spot selection
-        ttk.Label(control_frame, text="Target Hiding Spot:").pack(anchor='w')
+        ttk.Label(target_frame, text="Target Hiding Spot:").pack(anchor='w')
         self.target_spot_var = tk.StringVar(value="A")
-        target_combo = ttk.Combobox(control_frame, textvariable=self.target_spot_var, 
+        target_combo = ttk.Combobox(target_frame, textvariable=self.target_spot_var, 
                                    values=["A", "B", "C", "D"], state='readonly')
         target_combo.pack(fill='x', pady=2)
         
         # Send target button
-        self.send_target_button = ttk.Button(control_frame, text="Send Target Spot", 
+        self.send_target_button = ttk.Button(target_frame, text="Send Target Spot", 
                                             command=self.on_send_target)
         self.send_target_button.pack(pady=5)
         
-                # Start Trial button
-        self.start_trial_button = ttk.Button(control_frame, text="🚀 START TRIAL", 
-                                           command=self.on_start_trial, style='Accent.TButton')
-        self.start_trial_button.pack(pady=5)
-        
         # Auto-send target button (uses k-ToM recommendation)
-        self.auto_send_target_button = ttk.Button(control_frame, text="🤖 Auto-Send k-ToM Target", 
+        self.auto_send_target_button = ttk.Button(target_frame, text="🤖 Auto-Send k-ToM Target", 
                                                   command=self.on_auto_send_target, style='Accent.TButton')
         self.auto_send_target_button.pack(pady=5)
         
-                # Color Selection Mode
-        ttk.Label(control_frame, text="Color Selection Mode:").pack(anchor='w', pady=(10,0))
+        # Mode selection frame with 3 columns
+        mode_frame = ttk.LabelFrame(left_panel, text="Mode Selections", padding=10)
+        mode_frame.pack(fill='x', pady=5)
+        
+        # Create 3 columns
+        col1 = ttk.Frame(mode_frame)
+        col1.pack(side='left', fill='both', expand=True, padx=(0, 5))
+        
+        col2 = ttk.Frame(mode_frame)
+        col2.pack(side='left', fill='both', expand=True, padx=5)
+        
+        col3 = ttk.Frame(mode_frame)
+        col3.pack(side='left', fill='both', expand=True, padx=(5, 0))
+        
+        # Column 1: Line following mode
+        ttk.Label(col1, text="4. Line Following Mode:", font=('Arial', 10, 'bold')).pack(anchor='w')
         self.color_mode_var = tk.StringVar(value="auto")
-        color_combo = ttk.Combobox(control_frame, textvariable=self.color_mode_var, 
+        color_combo = ttk.Combobox(col1, textvariable=self.color_mode_var, 
                                   values=["auto", "manual"], state='readonly')
         color_combo.pack(fill='x', pady=2)
         
-        # Send color mode button
-        self.send_color_mode_button = ttk.Button(control_frame, text="Set Color Mode", 
+        self.send_color_mode_button = ttk.Button(col1, text="Set", 
                                                command=self.on_send_color_mode)
-        self.send_color_mode_button.pack(pady=5)
+        self.send_color_mode_button.pack(pady=2)
         
-        # Mode toggles
-        ttk.Label(control_frame, text="Drive Mode:").pack(anchor='w', pady=(10,0))
-        self.drive_mode_var = tk.StringVar(value="auto_line")
-        drive_combo = ttk.Combobox(control_frame, textvariable=self.drive_mode_var, 
-                                   values=["auto_line", "manual_line", "manual_drive"], state='readonly')
-        drive_combo.pack(fill='x', pady=2)
+        # Column 2: Hiding spot mode
+        ttk.Label(col2, text="5. Hiding Spot Mode:", font=('Arial', 10, 'bold')).pack(anchor='w')
+        self.hiding_spot_mode_var = tk.StringVar(value="auto")
+        hiding_spot_combo = ttk.Combobox(col2, textvariable=self.hiding_spot_mode_var, 
+                                        values=["auto", "manual"], state='readonly')
+        hiding_spot_combo.pack(fill='x', pady=2)
         
-        # Send drive mode button
-        self.send_drive_mode_button = ttk.Button(control_frame, text="Set Drive Mode", 
-                                                command=self.on_send_drive_mode)
-        self.send_drive_mode_button.pack(pady=5)
+        self.send_hiding_spot_mode_button = ttk.Button(col2, text="Set", 
+                                                     command=self.on_send_hiding_spot_mode)
+        self.send_hiding_spot_mode_button.pack(pady=2)
         
-        # Rat detection mode
-        ttk.Label(control_frame, text="Rat Detection Mode:").pack(anchor='w', pady=(10,0))
+        # Column 3: Rat detection mode
+        ttk.Label(col3, text="6. Rat Detection Mode:", font=('Arial', 10, 'bold')).pack(anchor='w')
         self.rat_mode_var = tk.StringVar(value="auto")
-        rat_combo = ttk.Combobox(control_frame, textvariable=self.rat_mode_var, 
+        rat_combo = ttk.Combobox(col3, textvariable=self.rat_mode_var, 
                                 values=["auto", "manual"], state='readonly')
         rat_combo.pack(fill='x', pady=2)
         
-        # Send rat mode button
-        self.send_rat_mode_button = ttk.Button(control_frame, text="Set Rat Mode", 
+        self.send_rat_mode_button = ttk.Button(col3, text="Set", 
                                               command=self.on_send_rat_mode)
-        self.send_rat_mode_button.pack(pady=5)
+        self.send_rat_mode_button.pack(pady=2)
         
         # Manual found button
-        self.manual_found_button = ttk.Button(control_frame, text="Manual: Rat Found!", 
+        self.manual_found_button = ttk.Button(left_panel, text="Manual: Rat Found!", 
                                              command=self.on_manual_found, style='Accent.TButton')
         self.manual_found_button.pack(pady=10)
         
-        # Trial Progress Indicator
-        progress_frame = ttk.LabelFrame(parent, text="🎯 Trial Progress", padding=10)
-        progress_frame.pack(fill='x', padx=10, pady=5)
-        
-        # Progress steps
-        self.progress_steps = [
-            "1. Leave entrance",
-            "2. Reach intersection & start new line", 
-            "3. Follow the line",
-            "4. Wait at hiding spot (detect rat)",
-            "5. Wait 10s, turn 180°",
-            "6. Follow line back (same color)",
-            "7. Reach intersection & return to start",
-            "8. Wait for new command, turn 180°, reset"
-        ]
-        
-        # Create progress indicators
-        self.progress_labels = []
-        for i, step in enumerate(self.progress_steps):
-            label = ttk.Label(progress_frame, text=f"⭕ {step}", 
-                             font=('Arial', 9), foreground='gray')
-            label.pack(anchor='w', pady=1)
-            self.progress_labels.append(label)
-        
-        # Current step indicator
-        self.current_step_var = tk.StringVar(value="Waiting for trial to start...")
-        self.current_step_label = ttk.Label(progress_frame, textvariable=self.current_step_var,
-                                           font=('Arial', 10, 'bold'), foreground='blue')
-        self.current_step_label.pack(pady=5)
-        
         # Manual driving frame
-        drive_frame = ttk.LabelFrame(parent, text="Manual Driving", padding=10)
-        drive_frame.pack(fill='x', padx=10, pady=5)
+        drive_frame = ttk.LabelFrame(left_panel, text="Manual Driving", padding=10)
+        drive_frame.pack(fill='x', pady=5)
         
         # Speed controls
         ttk.Label(drive_frame, text="Linear Speed (m/s):").pack(anchor='w')
@@ -648,7 +646,7 @@ class KToMExperimenterGUI:
         ttk.Label(drive_frame, text="Angular Speed (rad/s):").pack(anchor='w')
         self.angular_speed_var = tk.DoubleVar(value=0.0)
         self.angular_speed_spin = ttk.Spinbox(drive_frame, from_=-2.0, to=2.0, increment=0.1, 
-                                            textvariable=self.angular_speed_var)
+                                           textvariable=self.angular_speed_var)
         self.angular_speed_spin.pack(fill='x', pady=2)
         
         # Send velocity button
@@ -679,8 +677,8 @@ class KToMExperimenterGUI:
             pass
         
         # Robot status frame
-        status_frame = ttk.LabelFrame(parent, text="Robot Status", padding=10)
-        status_frame.pack(fill='both', expand=True, padx=10, pady=5)
+        status_frame = ttk.LabelFrame(left_panel, text="Robot Status", padding=10)
+        status_frame.pack(fill='both', expand=True, pady=5)
         
         # Status text widget
         self.robot_status_text = tk.Text(status_frame, height=8, wrap='word')
@@ -689,6 +687,107 @@ class KToMExperimenterGUI:
         
         self.robot_status_text.pack(side='left', fill='both', expand=True)
         status_scrollbar.pack(side='right', fill='y')
+        
+        # === RIGHT PANEL: INSTRUCTIONS & PROGRESS ===
+        
+        # Trial Instructions frame
+        instructions_frame = ttk.LabelFrame(right_panel, text="📋 Trial Instructions", padding=10)
+        instructions_frame.pack(fill='x', pady=5)
+        
+        # Instructions text
+        instructions_text = """
+Step-by-Step Process:
+
+1) Connect to robot
+   • Enter robot IP address
+   • Click "Connect to Robot"
+   • Click "Check Robot Status"
+
+2) Verify robot is ready
+   • If status shows issues, run these commands on robot:
+     Tab 1: ros2 launch rosbridge_server rosbridge_websocket_launch.xml port:=10090
+     Tab 2: ./start_hide_and_seek.sh
+
+3) Send target hiding spot
+   • Use k-ToM recommendation (Auto-Send button)
+   • Or manually select with override checkbox
+
+4) Configure modes (3 columns):
+   • Line following: auto/manual ROI selection
+   • Hiding spot: auto/manual selection  
+   • Rat detection: auto LiDAR/manual button
+
+5) Start trial when ready
+   • Click the big green START TRIAL button below
+        """
+        
+        instructions_label = ttk.Label(instructions_frame, text=instructions_text, 
+                                      font=('Arial', 9), justify='left', wraplength=300)
+        instructions_label.pack(anchor='w', pady=5)
+        
+        # Trial Progress frame
+        progress_frame = ttk.LabelFrame(right_panel, text="🎯 Trial Progress", padding=10)
+        progress_frame.pack(fill='x', pady=5)
+        
+        # Progress steps with checkboxes
+        self.progress_steps = [
+            "1. Leave entrance",
+            "2. Reach intersection & start new line", 
+            "3. Follow the line",
+            "4. Wait at hiding spot (detect rat)",
+            "5. Wait 10s, turn 180°",
+            "6. Follow line back (same color)",
+            "7. Reach intersection & return to start",
+            "8. Wait for new command, turn 180°, reset"
+        ]
+        
+        # Create progress indicators with checkboxes
+        self.progress_vars = []
+        self.progress_labels = []
+        for i, step in enumerate(self.progress_steps):
+            var = tk.BooleanVar(value=False)
+            self.progress_vars.append(var)
+            
+            # Create frame for each step
+            step_frame = ttk.Frame(progress_frame)
+            step_frame.pack(fill='x', pady=1)
+            
+            # Checkbox
+            checkbox = ttk.Checkbutton(step_frame, variable=var, state='disabled')
+            checkbox.pack(side='left', padx=(0, 5))
+            
+            # Label
+            label = ttk.Label(step_frame, text=step, 
+                             font=('Arial', 9), foreground='gray')
+            label.pack(side='left', fill='x', expand=True)
+            self.progress_labels.append(label)
+        
+        # Current step indicator
+        self.current_step_var = tk.StringVar(value="Waiting for trial to start...")
+        self.current_step_label = ttk.Label(progress_frame, textvariable=self.current_step_var,
+                                           font=('Arial', 10, 'bold'), foreground='blue')
+        self.current_step_label.pack(pady=5)
+        
+        # === BIG GREEN START TRIAL BUTTON ===
+        # Create a frame at the bottom for the start trial button
+        start_trial_frame = ttk.Frame(parent)
+        start_trial_frame.pack(side='bottom', fill='x', padx=10, pady=10)
+        
+        # Big green start trial button
+        self.start_trial_button = ttk.Button(start_trial_frame, text="🚀 START TRIAL", 
+                                           command=self.on_start_trial, style='StartTrial.TButton')
+        self.start_trial_button.pack(fill='x', pady=5)
+        
+        # Style the start trial button to be big and green
+        try:
+            style = ttk.Style()
+            style.configure('StartTrial.TButton', 
+                          background='green', 
+                          foreground='white',
+                          font=('Arial', 16, 'bold'))
+        except:
+            # Fallback if styling fails
+            pass
         
     def on_k_level_change(self, event):
         if self.k_level_var.get() == 0:
@@ -989,12 +1088,17 @@ class KToMExperimenterGUI:
 
     def on_send_target(self):
         if self.robot_link and self.robot_link.connected:
+            # Check if manual override is enabled
+            if not self.manual_override_var.get():
+                messagebox.showwarning("Warning", "Manual override is disabled. Use 'Auto-Send k-ToM Target' button to send the recommended spot.")
+                return
+                
             target = self.target_spot_var.get()
             # Convert A,B,C,D to 0,1,2,3
             target_map = {"A": 0, "B": 1, "C": 2, "D": 3}
             target_idx = target_map.get(target, 0)
             self.robot_link.send_target(target_idx)
-            self.update_robot_status(f"Sent target spot: {target} (index: {target_idx})")
+            self.update_robot_status(f"Sent manual target spot: {target} (index: {target_idx})")
         else:
             messagebox.showwarning("Warning", "Not connected to robot!")
 
@@ -1031,6 +1135,24 @@ class KToMExperimenterGUI:
             self.update_robot_status(f"Set rat detection mode: {mode}")
         else:
             messagebox.showwarning("Warning", "Not connected to robot!")
+            
+    def on_send_hiding_spot_mode(self):
+        if self.robot_link and self.robot_link.connected:
+            mode = self.hiding_spot_mode_var.get()
+            self.robot_link.send_toggle(f"hiding_spot_mode={mode}")
+            self.update_robot_status(f"Set hiding spot mode: {mode}")
+        else:
+            messagebox.showwarning("Warning", "Not connected to robot!")
+            
+    def on_manual_override_toggle(self):
+        """Handle manual override toggle for target spot selection"""
+        if self.manual_override_var.get():
+            # Enable manual target spot selection
+            self.target_spot_var.set("A")  # Reset to default
+            self.update_robot_status("Manual target spot selection enabled")
+        else:
+            # Disable manual selection, use k-ToM recommendation
+            self.update_robot_status("Using k-ToM recommendation for target spot")
 
     def on_manual_found(self):
         if self.robot_link and self.robot_link.connected:
@@ -1297,15 +1419,21 @@ class KToMExperimenterGUI:
     def update_trial_progress(self, step_number):
         """Update the trial progress indicator"""
         if 0 <= step_number <= len(self.progress_steps):
-            # Update all progress labels
-            for i, label in enumerate(self.progress_labels):
+            # Update all progress checkboxes and labels
+            for i, (var, label) in enumerate(zip(self.progress_vars, self.progress_labels)):
                 if i < step_number:
-                    label.config(text=f"✅ {self.progress_steps[i]}", foreground='green')
+                    # Completed steps
+                    var.set(True)
+                    label.config(foreground='green')
                 elif i == step_number:
-                    label.config(text=f"🔄 {self.progress_steps[i]}", foreground='orange')
+                    # Current step
+                    var.set(False)
+                    label.config(foreground='orange')
                     self.current_step_var.set(f"Current: {self.progress_steps[i]}")
                 else:
-                    label.config(text=f"⭕ {self.progress_steps[i]}", foreground='gray')
+                    # Future steps
+                    var.set(False)
+                    label.config(foreground='gray')
             
             if step_number == 0:
                 self.current_step_var.set("Waiting for trial to start...")
