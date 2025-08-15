@@ -924,21 +924,19 @@ class KToMExperimenterGUI:
                     self.update_robot_status(f"Progress: {progress}")
                     # Map progress messages to trial steps
                     progress_lower = progress.lower()
-                    if "entrance" in progress_lower:
+                    if "leaving_entrance" in progress_lower or "entrance" in progress_lower:
                         self.update_trial_progress(1)  # Step 1: Leave entrance
                     elif "intersection" in progress_lower:
                         self.update_trial_progress(2)  # Step 2: Reach intersection
-                    elif "following" in progress_lower:
+                    elif "following_line" in progress_lower:
                         self.update_trial_progress(3)  # Step 3: Follow the line
-                    elif "waiting" in progress_lower and "rat" in progress_lower:
+                    elif "waiting_for_rat" in progress_lower:
                         self.update_trial_progress(4)  # Step 4: Wait at hiding spot
-                    elif "turning" in progress_lower or "180" in progress_lower:
+                    elif "turning_180" in progress_lower:
                         self.update_trial_progress(5)  # Step 5: Wait 10s, turn 180°
-                    elif "returning" in progress_lower or "back" in progress_lower:
-                        self.update_trial_progress(6)  # Step 6: Follow line back
-                    elif "start" in progress_lower and "return" in progress_lower:
+                    elif "returning_home" in progress_lower:
                         self.update_trial_progress(7)  # Step 7: Return to start
-                    elif "waiting" in progress_lower and "command" in progress_lower:
+                    elif "reset" in progress_lower:
                         self.update_trial_progress(8)  # Step 8: Wait for new command
                 
                 # Connect with callbacks
@@ -1195,10 +1193,30 @@ class KToMExperimenterGUI:
                     # Update the target spot variable
                     self.target_spot_var.set(target_spot)
                     
-                    # Send to robot
+                    # Send target to robot
                     target_map = {"A": 0, "B": 1, "C": 2, "D": 3}
                     target_idx = target_map.get(target_spot, 0)
                     self.robot_link.send_target(target_idx)
+                    
+                    # Send line color to robot (convert RGB to HSV hue)
+                    try:
+                        line_colors = self.get_line_colors()
+                        if line_colors and target_spot in line_colors:
+                            rgb_str = line_colors[target_spot]
+                            rgb_values = [int(x.strip()) for x in rgb_str.split(',')]
+                            if len(rgb_values) == 3:
+                                # Convert RGB to HSV
+                                import cv2
+                                import numpy as np
+                                rgb_array = np.array([[rgb_values]], dtype=np.uint8)
+                                hsv_array = cv2.cvtColor(rgb_array, cv2.COLOR_RGB2HSV)
+                                hue = int(hsv_array[0, 0, 0])
+                                
+                                # Send line color to robot
+                                self.robot_link.send_line_color(hue)
+                                self.update_robot_status(f"🎨 Sent line color for {target_spot}: RGB{rgb_values} → HSV hue {hue}")
+                    except Exception as color_error:
+                        self.update_robot_status(f"⚠️ Could not send line color: {str(color_error)}")
                     
                     self.update_robot_status(f"🤖 Auto-sent k-ToM recommendation: {target_spot} (index: {target_idx})")
                     self.update_trial_progress(0)  # Reset trial progress

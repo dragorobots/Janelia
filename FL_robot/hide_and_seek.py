@@ -102,8 +102,10 @@ class HideAndSeekNode(Node):
         self.REVERSE_SPEED = -0.1
         self.REVERSE_DURATION = 0.33
         self.SEARCH_TURN_SPEED = 0.6
-        self.SEARCH_DURATION_LEFT = 1.3
-        self.SEARCH_DURATION_RIGHT = 2.6
+        # Calculate duration for 90-degree turns (90° = π/2 radians)
+        # At 0.6 rad/s, 90° takes: (π/2) / 0.6 ≈ 2.62 seconds
+        self.SEARCH_DURATION_LEFT = 2.7   # 90 degrees left
+        self.SEARCH_DURATION_RIGHT = 2.7  # 90 degrees right
         self.initial_camera_yaw = 0
         self.initial_dispenser_angle = 0
         self.turn_duration = 7.5
@@ -289,15 +291,25 @@ class HideAndSeekNode(Node):
         if self.main_state == RobotState.START:
             progress_msg.data = "start_phase"
         elif self.main_state == RobotState.PICK_COLOR:
-            progress_msg.data = "pick_color_phase"
+            if self.pc_drive_mode == "auto_line" and self.pc_line_color_hue is not None:
+                progress_msg.data = "leaving_entrance"
+            else:
+                progress_msg.data = "pick_color_phase"
         elif self.main_state == RobotState.FOLLOWING_LINE:
-            progress_msg.data = "following_line"
+            if self.follow_state == FollowState.TRACKING:
+                progress_msg.data = "following_line"
+            elif self.follow_state == FollowState.SEARCHING:
+                progress_msg.data = "searching_for_line"
+            elif self.follow_state == FollowState.REVERSING:
+                progress_msg.data = "reversing"
+            else:
+                progress_msg.data = "following_line"
         elif self.main_state == RobotState.WAITING_FOR_RAT:
             progress_msg.data = "waiting_for_rat"
         elif self.main_state == RobotState.DISPENSING:
             progress_msg.data = "dispensing"
         elif self.main_state == RobotState.TURNING:
-            progress_msg.data = "turning"
+            progress_msg.data = "turning_180"
         elif self.main_state == RobotState.RETURNING_HOME:
             progress_msg.data = "returning_home"
         elif self.main_state == RobotState.RESET:
@@ -329,6 +341,27 @@ class HideAndSeekNode(Node):
         self.get_logger().info("Transitioning to PICK_COLOR state.")
 
     def execute_pick_color_phase(self, frame):
+        # Check if we should skip manual color selection in auto mode
+        if self.pc_drive_mode == "auto_line" and self.pc_line_color_hue is not None:
+            # Use the color provided by PC
+            h = self.pc_line_color_hue
+            s, v = 100, 100  # Default saturation and value
+            h_margin, s_margin, v_margin = 10, 70, 70
+            lower = np.array([max(0, h - h_margin), max(40, s - s_margin), max(40, v - v_margin)])
+            upper = np.array([min(179, h + h_margin), min(255, s + s_margin), min(255, v + v_margin)])
+            self.target_hsv_range = (lower, upper)
+            
+            self.get_logger().info(f"Auto color selected. Hue: {h}. Range: L={lower}, U={upper}")
+            self.main_state = RobotState.FOLLOWING_LINE
+            self.follow_state = FollowState.TRACKING
+            
+            # Publish progress update
+            progress_msg = String()
+            progress_msg.data = "leaving_entrance"
+            self.progress_pub.publish(progress_msg)
+            return
+        
+        # Manual color selection mode
         cv2.putText(frame, "Click and drag to select the line color", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
         if self.selecting_box:
             cv2.rectangle(frame, self.box_start_point, self.box_end_point, (0, 255, 0), 2)
@@ -342,6 +375,18 @@ class HideAndSeekNode(Node):
         if self.target_hsv_range is None:
             self.stop_robot()
             return None
+            
+        # Publish line following status
+        status_msg = String()
+        if self.follow_state == FollowState.TRACKING:
+            status_msg.data = "following_line"
+        elif self.follow_state == FollowState.SEARCHING:
+            status_msg.data = "searching_for_line"
+        elif self.follow_state == FollowState.REVERSING:
+            status_msg.data = "reversing"
+        else:
+            status_msg.data = "stopped"
+        self.line_follow_status_pub.publish(status_msg)
 
         hsv_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
         if len(self.target_hsv_range) == 4:
@@ -396,13 +441,14 @@ class HideAndSeekNode(Node):
                 if elapsed_time < duration_this_turn:
                     twist.angular.z = self.SEARCH_TURN_SPEED * self.search_direction
                     self.cmd_vel_pub.publish(twist)
+                    self.get_logger().info(f"Searching: {elapsed_time:.1f}s / {duration_this_turn:.1f}s, direction: {'left' if self.search_direction == 1 else 'right'}")
                 else:
                     if self.search_direction == 1:
-                        self.get_logger().info("Switching to search right.")
+                        self.get_logger().info("90° left search complete, switching to 90° right search.")
                         self.search_direction = -1
                         self.action_start_time = time.time()
                     else:
-                        self.get_logger().info("Search complete, line not found.")
+                        self.get_logger().info("180° search complete, line not found.")
                         self.follow_state = FollowState.STOPPED
                         self.stop_robot()
                         if not returning: 
