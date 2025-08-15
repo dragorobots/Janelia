@@ -16,6 +16,7 @@ class RosLink:
         self.target = roslibpy.Topic(self.ros,'/hide_and_seek/target_spot','std_msgs/msg/Int32')
         self.toggle = roslibpy.Topic(self.ros,'/hide_and_seek/toggles','std_msgs/msg/String')
         self.cmdvel = roslibpy.Topic(self.ros,'/hide_and_seek/cmd_vel','geometry_msgs/msg/Twist')
+        self.line_color = roslibpy.Topic(self.ros,'/hide_and_seek/line_color','std_msgs/msg/String')
         self.lf = roslibpy.Topic(self.ros,'/line_follow/status','std_msgs/msg/String')
         self.rat = roslibpy.Topic(self.ros,'/rat_detection/found','std_msgs/msg/Bool')
         self.prog = roslibpy.Topic(self.ros,'/hide_and_seek/progress','std_msgs/msg/String')
@@ -28,6 +29,7 @@ class RosLink:
             self.target.advertise()
             self.toggle.advertise()
             self.cmdvel.advertise()
+            self.line_color.advertise()
             if on_lf: self.lf.subscribe(lambda m: on_lf(m['data']))
             if on_rat: self.rat.subscribe(lambda m: on_rat(bool(m['data'])))
             if on_prog: self.prog.subscribe(lambda m: on_prog(m['data']))
@@ -52,12 +54,16 @@ class RosLink:
                 'angular': {'x': 0.0, 'y': 0.0, 'z': float(w)}
             }))
 
+    def send_line_color(self, hue):
+        if self.connected:
+            self.line_color.publish(roslibpy.Message({'data': f'hue={hue}'}))
+
     def add_status_callback(self, callback):
         self.status_callbacks.append(callback)
 
     def close(self):
         self.connected = False
-        for t in [self.target, self.toggle, self.cmdvel, self.lf, self.rat, self.prog]:
+        for t in [self.target, self.toggle, self.cmdvel, self.line_color, self.lf, self.rat, self.prog]:
             try: t.unadvertise()
             except: pass
         self.ros.terminate()
@@ -1036,12 +1042,18 @@ Step-by-Step Process:
                         new_step = 1  # Trial started - beginning line following
                     elif "leaving_entrance" in progress_lower or "entrance" in progress_lower:
                         new_step = 1  # Step 1: Leave entrance (line following)
+                    elif "following_start_line" in progress_lower:
+                        new_step = 1  # Step 1: Following start line to intersection
+                    elif "at_intersection_centering" in progress_lower:
+                        new_step = 2  # Step 2: At intersection, centering
+                    elif "following_target_line" in progress_lower:
+                        new_step = 3  # Step 3: Following target line to hiding spot
                     elif "following_line" in progress_lower:
-                        new_step = 3  # Step 3: Follow the line
+                        new_step = 3  # Step 3: Follow the line (legacy)
                     elif "searching_for_line" in progress_lower:
                         new_step = 3  # Step 3: Still in line following phase
                     elif "intersection" in progress_lower:
-                        new_step = 2  # Step 2: Reach intersection
+                        new_step = 2  # Step 2: Reach intersection (legacy)
                     elif "waiting_for_rat" in progress_lower:
                         new_step = 4  # Step 4: Wait at hiding spot
                     elif "turning_180" in progress_lower:

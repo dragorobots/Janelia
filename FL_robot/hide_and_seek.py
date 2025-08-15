@@ -41,12 +41,14 @@ CTRL-C to quit
 class RobotState:
     START = 0
     PICK_COLOR = 1
-    FOLLOWING_LINE = 2
-    WAITING_FOR_RAT = 3
-    TURNING = 4
-    RETURNING_HOME = 5
-    RESET = 6
-    MANUAL_CONTROL = 7
+    FOLLOWING_START_LINE = 2  # NEW: Follow start line to intersection
+    AT_INTERSECTION = 3       # NEW: At intersection, perform centering
+    FOLLOWING_TARGET_LINE = 4 # NEW: Follow target line to hiding spot
+    WAITING_FOR_RAT = 5
+    TURNING = 6
+    RETURNING_HOME = 7
+    RESET = 8
+    MANUAL_CONTROL = 9
 
 # State machine for the more detailed line-following logic
 class FollowState:
@@ -87,8 +89,11 @@ class HideAndSeekNode(Node):
         # --- Line Following Logic and State ---
         self.follow_state = FollowState.STOPPED
         self.target_hsv_range = None
+        self.start_line_hsv_range = None  # NEW: HSV range for start line
         self.action_start_time = None
         self.search_direction = 1
+        self.intersection_detected = False  # NEW: Track if we've reached intersection
+        self.centering_phase = 0  # NEW: Track centering maneuver phase (0-3)
 
         # --- Parameters ---
         self.linear_speed = 0.12
@@ -248,13 +253,15 @@ class HideAndSeekNode(Node):
             self.execute_start_phase(display_view)
         elif self.main_state == RobotState.PICK_COLOR:
             self.execute_pick_color_phase(display_view)
-        elif self.main_state in [RobotState.FOLLOWING_LINE, RobotState.RETURNING_HOME]:
+        elif self.main_state in [RobotState.FOLLOWING_START_LINE, RobotState.AT_INTERSECTION, RobotState.FOLLOWING_TARGET_LINE]:
             mask_display = self.execute_line_follow(display_view, returning=(self.main_state == RobotState.RETURNING_HOME))
             if mask_display is not None and mask_display.size > 0:
                 # Ensure both images have the same height before concatenating
                 if mask_display.shape[0] != display_view.shape[0]:
                     mask_display = cv2.resize(mask_display, (mask_display.shape[1], display_view.shape[0]))
                 display_view = cv2.hconcat([display_view, mask_display])
+        elif self.main_state == RobotState.AT_INTERSECTION:
+            self.execute_intersection_centering(display_view)
         elif self.main_state == RobotState.WAITING_FOR_RAT:
             self.execute_wait_for_rat(display_view)
 
@@ -304,15 +311,26 @@ class HideAndSeekNode(Node):
                 progress_msg.data = "leaving_entrance"
             else:
                 progress_msg.data = "pick_color_phase"
-        elif self.main_state == RobotState.FOLLOWING_LINE:
+        elif self.main_state == RobotState.FOLLOWING_START_LINE:
             if self.follow_state == FollowState.TRACKING:
-                progress_msg.data = "following_line"
+                progress_msg.data = "following_start_line"
             elif self.follow_state == FollowState.SEARCHING:
-                progress_msg.data = "searching_for_line"
+                progress_msg.data = "searching_for_start_line"
             elif self.follow_state == FollowState.REVERSING:
                 progress_msg.data = "reversing"
             else:
-                progress_msg.data = "following_line"
+                progress_msg.data = "following_start_line"
+        elif self.main_state == RobotState.AT_INTERSECTION:
+            progress_msg.data = "at_intersection_centering"
+        elif self.main_state == RobotState.FOLLOWING_TARGET_LINE:
+            if self.follow_state == FollowState.TRACKING:
+                progress_msg.data = "following_target_line"
+            elif self.follow_state == FollowState.SEARCHING:
+                progress_msg.data = "searching_for_target_line"
+            elif self.follow_state == FollowState.REVERSING:
+                progress_msg.data = "reversing"
+            else:
+                progress_msg.data = "following_target_line"
         elif self.main_state == RobotState.WAITING_FOR_RAT:
             progress_msg.data = "waiting_for_rat"
 
@@ -380,7 +398,7 @@ class HideAndSeekNode(Node):
     def execute_pick_color_phase(self, frame):
         # Check color selection mode
         if self.pc_color_selection_mode == "auto" and self.pc_line_color_hue is not None:
-            # Auto mode: Use the color provided by PC
+            # Auto mode: Use the color provided by PC for target line
             h = self.pc_line_color_hue
             s, v = 100, 100  # Default saturation and value
             h_margin, s_margin, v_margin = 10, 70, 70
@@ -388,9 +406,16 @@ class HideAndSeekNode(Node):
             upper = np.array([min(179, h + h_margin), min(255, s + s_margin), min(255, v + v_margin)])
             self.target_hsv_range = (lower, upper)
             
-            self.get_logger().info(f"Auto color selected. Hue: {h}. Range: L={lower}, U={upper}")
-            self.main_state = RobotState.FOLLOWING_LINE
+            # For now, assume start line is red (hue 0) - this should be configurable
+            start_h = 0  # Red hue
+            start_lower = np.array([max(0, start_h - h_margin), max(40, s - s_margin), max(40, v - v_margin)])
+            start_upper = np.array([min(179, start_h + h_margin), min(255, s + s_margin), min(255, v + v_margin)])
+            self.start_line_hsv_range = (start_lower, start_upper)
+            
+            self.get_logger().info(f"Auto colors selected. Target Hue: {h}, Start Hue: {start_h}")
+            self.main_state = RobotState.FOLLOWING_START_LINE
             self.follow_state = FollowState.TRACKING
+            self.intersection_detected = False
             
             # Publish progress update
             progress_msg = String()
@@ -412,7 +437,18 @@ class HideAndSeekNode(Node):
             # PC is controlling the robot directly
             return None
             
-        if self.target_hsv_range is None:
+        # Determine which line color to follow based on current state
+        if self.main_state == RobotState.FOLLOWING_START_LINE:
+            if self.start_line_hsv_range is None:
+                self.stop_robot()
+                return None
+            current_hsv_range = self.start_line_hsv_range
+        elif self.main_state == RobotState.FOLLOWING_TARGET_LINE:
+            if self.target_hsv_range is None:
+                self.stop_robot()
+                return None
+            current_hsv_range = self.target_hsv_range
+        else:
             self.stop_robot()
             return None
             
@@ -432,16 +468,16 @@ class HideAndSeekNode(Node):
         hsv_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
         
         # Handle different HSV range formats
-        if isinstance(self.target_hsv_range, tuple) and len(self.target_hsv_range) == 2:
+        if isinstance(current_hsv_range, tuple) and len(current_hsv_range) == 2:
             # Standard format: (lower, upper)
-            mask = cv2.inRange(hsv_frame, self.target_hsv_range[0], self.target_hsv_range[1])
-        elif isinstance(self.target_hsv_range, tuple) and len(self.target_hsv_range) == 4:
+            mask = cv2.inRange(hsv_frame, current_hsv_range[0], current_hsv_range[1])
+        elif isinstance(current_hsv_range, tuple) and len(current_hsv_range) == 4:
             # Extended format: (lower1, upper1, lower2, upper2) for hue wrap-around
-            mask1 = cv2.inRange(hsv_frame, self.target_hsv_range[0], self.target_hsv_range[1])
-            mask2 = cv2.inRange(hsv_frame, self.target_hsv_range[2], self.target_hsv_range[3])
+            mask1 = cv2.inRange(hsv_frame, current_hsv_range[0], current_hsv_range[1])
+            mask2 = cv2.inRange(hsv_frame, current_hsv_range[2], current_hsv_range[3])
             mask = cv2.add(mask1, mask2)
         else:
-            self.get_logger().error(f"Invalid HSV range format: {self.target_hsv_range}")
+            self.get_logger().error(f"Invalid HSV range format: {current_hsv_range}")
             return None
         
         # Enhanced noise filtering
@@ -548,17 +584,95 @@ class HideAndSeekNode(Node):
                             self.get_logger().info("Search complete (90° left + 5.5s right + 2.7s left recenter), line not found.")
                             self.follow_state = FollowState.STOPPED
                             self.stop_robot()
-                            if not returning: 
+                            if self.main_state == RobotState.FOLLOWING_TARGET_LINE:
+                                # We've reached the hiding spot
+                                self.get_logger().info("Reached hiding spot. Starting rat detection.")
                                 self.main_state = RobotState.WAITING_FOR_RAT
                                 self.lidar_ready_time = time.time() + self.LIDAR_GRACE_PERIOD
                                 self.lidar_baseline = None
-                            else: 
+                            elif returning: 
                                 self.main_state = RobotState.RESET
+                            else:
+                                # This shouldn't happen, but just in case
+                                self.main_state = RobotState.WAITING_FOR_RAT
+                                self.lidar_ready_time = time.time() + self.LIDAR_GRACE_PERIOD
+                                self.lidar_baseline = None
 
         elif self.follow_state == FollowState.STOPPED:
             self.stop_robot()
+            
+        # Check for intersection detection (when following start line)
+        if self.main_state == RobotState.FOLLOWING_START_LINE and not self.intersection_detected:
+            # Look for the target line color in the frame to detect intersection
+            target_mask = cv2.inRange(hsv_frame, self.target_hsv_range[0], self.target_hsv_range[1])
+            target_contours, _ = cv2.findContours(target_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            
+            # If we detect the target line color, we've reached the intersection
+            if any(cv2.contourArea(contour) > self.min_line_area for contour in target_contours):
+                self.get_logger().info("INTERSECTION DETECTED! Starting centering maneuver.")
+                self.intersection_detected = True
+                self.main_state = RobotState.AT_INTERSECTION
+                self.centering_phase = 0
+                self.action_start_time = time.time()
+                self.stop_robot()
+                
+                # Publish progress update
+                progress_msg = String()
+                progress_msg.data = "at_intersection"
+                self.progress_pub.publish(progress_msg)
 
         return mask_display
+
+    def execute_intersection_centering(self, frame):
+        """Execute the centering maneuver at the intersection"""
+        if self.action_start_time is None:
+            self.action_start_time = time.time()
+            
+        elapsed_time = time.time() - self.action_start_time
+        
+        # Display current phase
+        phase_names = ["Right Turn (2.7s)", "Left Turn (5.5s)", "Right Turn (2.7s)", "Complete"]
+        cv2.putText(frame, f"Centering at Intersection: {phase_names[self.centering_phase]}", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
+        cv2.putText(frame, f"Elapsed: {elapsed_time:.1f}s", (50, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        
+        twist = Twist()
+        
+        if self.centering_phase == 0:  # Right turn for 2.7s
+            if elapsed_time < 2.7:
+                twist.angular.z = 0.6  # Turn right
+                self.cmd_vel_pub.publish(twist)
+            else:
+                self.centering_phase = 1
+                self.action_start_time = time.time()
+                self.stop_robot()
+                
+        elif self.centering_phase == 1:  # Left turn for 5.5s
+            if elapsed_time < 5.5:
+                twist.angular.z = -0.6  # Turn left
+                self.cmd_vel_pub.publish(twist)
+            else:
+                self.centering_phase = 2
+                self.action_start_time = time.time()
+                self.stop_robot()
+                
+        elif self.centering_phase == 2:  # Right turn for 2.7s
+            if elapsed_time < 2.7:
+                twist.angular.z = 0.6  # Turn right
+                self.cmd_vel_pub.publish(twist)
+            else:
+                self.centering_phase = 3
+                self.stop_robot()
+                
+        elif self.centering_phase == 3:  # Complete
+            self.get_logger().info("Centering complete. Starting to follow target line.")
+            self.main_state = RobotState.FOLLOWING_TARGET_LINE
+            self.follow_state = FollowState.TRACKING
+            self.action_start_time = None
+            
+            # Publish progress update
+            progress_msg = String()
+            progress_msg.data = "following_target_line"
+            self.progress_pub.publish(progress_msg)
 
     def execute_wait_for_rat(self, frame):
         if self.action_start_time is None:

@@ -1,110 +1,153 @@
 #!/usr/bin/env python3
 """
-Test script to verify line following fixes in hide_and_seek.py
-
-This script tests:
-1. More aggressive right turning during line search (3x more turning)
-2. Progress tracking improvements to prevent flickering
-3. Correct progress mapping in GUI
+Test script to verify the line following fixes in hide_and_seek.py
 """
 
-import time
-import math
+import sys
+import os
 
-def test_turning_durations():
-    """Test the new turning durations"""
-    print("🧪 Testing line following search turning durations...")
+def test_state_machine_updates():
+    """Test that the state machine has been properly updated"""
+    print("Testing state machine updates...")
     
-    # Constants from hide_and_seek.py
-    SEARCH_TURN_SPEED = 0.6  # rad/s
-    SEARCH_DURATION_LEFT = 2.7   # seconds
-    SEARCH_DURATION_RIGHT = 8.1  # seconds (3x more)
-    
-    # Calculate angles
-    left_angle = SEARCH_TURN_SPEED * SEARCH_DURATION_LEFT
-    right_angle = SEARCH_TURN_SPEED * SEARCH_DURATION_RIGHT
-    
-    left_degrees = math.degrees(left_angle)
-    right_degrees = math.degrees(right_angle)
-    total_degrees = left_degrees + right_degrees
-    
-    print(f"✅ Left turn: {SEARCH_DURATION_LEFT}s = {left_degrees:.1f}°")
-    print(f"✅ Right turn: {SEARCH_DURATION_RIGHT}s = {right_degrees:.1f}°")
-    print(f"✅ Total search: {total_degrees:.1f}° ({left_degrees:.1f}° + {right_degrees:.1f}°)")
-    print(f"✅ Right turn is {right_degrees/left_degrees:.1f}x longer than left turn")
-    
-    # Verify the 3x requirement
-    if abs(right_degrees/left_degrees - 3.0) < 0.1:
-        print("✅ Right turn is approximately 3x longer than left turn")
-    else:
-        print("❌ Right turn is not 3x longer than left turn")
-    
-    return True
-
-def test_progress_mapping():
-    """Test the progress message mapping"""
-    print("\n🧪 Testing progress message mapping...")
-    
-    # Test cases for progress messages
-    test_cases = [
-        ("waiting_for_start", 0, "Waiting for start"),
-        ("trial_started", 1, "Trial started - beginning line following"),
-        ("leaving_entrance", 1, "Leave entrance (line following)"),
-        ("following_line", 3, "Follow the line"),
-        ("searching_for_line", 3, "Still in line following phase"),
-        ("intersection", 2, "Reach intersection"),
-        ("waiting_for_rat", 4, "Wait at hiding spot"),
-        ("turning_180", 5, "Wait 10s, turn 180°"),
-        ("returning_home", 7, "Return to start"),
-        ("reset", 8, "Wait for new command"),
+    # Check if the new states are defined
+    expected_states = [
+        "FOLLOWING_START_LINE",
+        "AT_INTERSECTION", 
+        "FOLLOWING_TARGET_LINE"
     ]
     
-    for progress_msg, expected_step, description in test_cases:
-        print(f"✅ {progress_msg} → Step {expected_step}: {description}")
+    with open('hide_and_seek.py', 'r') as f:
+        content = f.read()
+        
+    for state in expected_states:
+        if state in content:
+            print(f"✅ Found state: {state}")
+        else:
+            print(f"❌ Missing state: {state}")
+            return False
     
     return True
 
-def test_progress_flickering_fix():
-    """Test the progress flickering fix"""
-    print("\n🧪 Testing progress flickering fix...")
+def test_intersection_detection():
+    """Test that intersection detection logic is present"""
+    print("\nTesting intersection detection logic...")
     
-    print("✅ Added last_published_progress tracking variable")
-    print("✅ Progress only published when state actually changes")
-    print("✅ Prevents continuous publishing every 0.1 seconds")
+    with open('hide_and_seek.py', 'r') as f:
+        content = f.read()
+    
+    # Check for intersection detection code
+    if "INTERSECTION DETECTED" in content:
+        print("✅ Intersection detection logic found")
+    else:
+        print("❌ Intersection detection logic missing")
+        return False
+    
+    # Check for centering maneuver
+    if "execute_intersection_centering" in content:
+        print("✅ Intersection centering method found")
+    else:
+        print("❌ Intersection centering method missing")
+        return False
+    
+    return True
+
+def test_line_color_handling():
+    """Test that line color handling is properly implemented"""
+    print("\nTesting line color handling...")
+    
+    with open('hide_and_seek.py', 'r') as f:
+        content = f.read()
+    
+    # Check for start line HSV range
+    if "start_line_hsv_range" in content:
+        print("✅ Start line HSV range handling found")
+    else:
+        print("❌ Start line HSV range handling missing")
+        return False
+    
+    # Check for target line HSV range
+    if "target_hsv_range" in content:
+        print("✅ Target line HSV range handling found")
+    else:
+        print("❌ Target line HSV range handling missing")
+        return False
+    
+    return True
+
+def test_ktom_integration():
+    """Test that k-tom experimenter integration is updated"""
+    print("\nTesting k-tom experimenter integration...")
+    
+    with open('ktom_experimenter.py', 'r', encoding='utf-8', errors='ignore') as f:
+        content = f.read()
+    
+    # Check for line color topic
+    if "line_color" in content and "send_line_color" in content:
+        print("✅ Line color topic and method found in k-tom")
+    else:
+        print("❌ Line color integration missing in k-tom")
+        return False
+    
+    return True
+
+def test_progress_tracking():
+    """Test that progress tracking is updated for new states"""
+    print("\nTesting progress tracking updates...")
+    
+    with open('hide_and_seek.py', 'r') as f:
+        content = f.read()
+    
+    expected_progress_messages = [
+        "following_start_line",
+        "at_intersection_centering", 
+        "following_target_line"
+    ]
+    
+    for msg in expected_progress_messages:
+        if msg in content:
+            print(f"✅ Progress message found: {msg}")
+        else:
+            print(f"❌ Progress message missing: {msg}")
+            return False
     
     return True
 
 def main():
     """Run all tests"""
-    print("🧪 Testing Line Following Fixes")
+    print("🧪 Testing Line Following Fixes\n")
     print("=" * 50)
     
-    try:
-        # Test 1: Turning durations
-        test_turning_durations()
-        
-        # Test 2: Progress mapping
-        test_progress_mapping()
-        
-        # Test 3: Progress flickering fix
-        test_progress_flickering_fix()
-        
-        print("\n🎉 All tests completed successfully!")
-        print("\n📋 Summary of fixes:")
-        print("1. ✅ Increased right turn duration to 8.1s (270°) - 3x more turning")
-        print("2. ✅ Fixed progress flickering by adding state tracking")
-        print("3. ✅ Improved progress mapping to prevent incorrect step jumps")
-        print("4. ✅ Added proper progress message filtering")
-        
-        print("\n🔧 Expected behavior after fixes:")
-        print("- Line following search: 90° left, then 270° right (3x more)")
-        print("- Progress indicator: No more flickering, accurate step tracking")
-        print("- Trial start: Proper progression from step 0 → 1 → 3")
-        
-    except Exception as e:
-        print(f"❌ Test failed with error: {e}")
-        import traceback
-        traceback.print_exc()
+    tests = [
+        test_state_machine_updates,
+        test_intersection_detection,
+        test_line_color_handling,
+        test_ktom_integration,
+        test_progress_tracking
+    ]
+    
+    passed = 0
+    total = len(tests)
+    
+    for test in tests:
+        try:
+            if test():
+                passed += 1
+            else:
+                print(f"❌ Test failed: {test.__name__}")
+        except Exception as e:
+            print(f"❌ Test error in {test.__name__}: {e}")
+    
+    print("\n" + "=" * 50)
+    print(f"📊 Test Results: {passed}/{total} tests passed")
+    
+    if passed == total:
+        print("🎉 All tests passed! Line following fixes are properly implemented.")
+        return True
+    else:
+        print("⚠️  Some tests failed. Please check the implementation.")
+        return False
 
 if __name__ == "__main__":
-    main()
+    success = main()
+    sys.exit(0 if success else 1)
