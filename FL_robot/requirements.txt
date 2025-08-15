@@ -14,3 +14,6 @@ pillow>=10.0.0  # For image processing in GUI
 
 # Color measurement tool
 opencv-python>=4.8.0  # For camera feed and color analysis
+
+# Camera server
+flask>=2.0.0  # For camera server web interface

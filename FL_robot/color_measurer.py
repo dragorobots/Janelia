@@ -212,7 +212,12 @@ class ColorMeasurer:
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             
             # Convert to PhotoImage
-            frame_pil = tk.PhotoImage(data=cv2.imencode('.ppm', frame_rgb)[1].tobytes())
+            try:
+                # Try PPM format first
+                frame_pil = tk.PhotoImage(data=cv2.imencode('.ppm', frame_rgb)[1].tobytes())
+            except Exception:
+                # Fallback to PNG format if PPM fails
+                frame_pil = tk.PhotoImage(data=cv2.imencode('.png', frame_rgb)[1].tobytes())
             
             # Update label
             self.video_label.config(image=frame_pil, text="")
@@ -258,14 +263,17 @@ class ColorMeasurer:
         r, g, b = rgb_values
         h, s, v = hsv_values
         
+        # Store the RGB values for copying
+        self.current_rgb_values = rgb_values
+        
         self.rgb_label.config(text=f"RGB: ({r}, {g}, {b})")
         self.hsv_label.config(text=f"HSV: ({h}, {s}, {v})")
         self.copy_btn.config(state='normal')
         
     def copy_rgb_values(self):
         """Copy RGB values to clipboard"""
-        if self.roi_selected and self.roi_coords:
-            r, g, b = self.rgb_values
+        if self.roi_selected and self.roi_coords and hasattr(self, 'current_rgb_values'):
+            r, g, b = self.current_rgb_values
             rgb_str = f"{r},{g},{b}"
             self.root.clipboard_clear()
             self.root.clipboard_append(rgb_str)
@@ -282,14 +290,24 @@ class ColorMeasurer:
 
 def main():
     """Main function"""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Robot Color Measurer")
+    parser.add_argument("--ip", default="10.0.0.234", help="Robot IP address")
+    parser.add_argument("--port", type=int, default=8080, help="Camera port")
+    
+    args = parser.parse_args()
+    
     print("🎨 Robot Color Measurer")
     print("=" * 30)
     print("This tool helps you measure line colors for the hide and seek robot.")
     print("Connect to the robot's camera and select regions to get RGB values.")
     print()
+    print(f"Target: {args.ip}:{args.port}")
+    print()
     
     # Create and run the color measurer
-    measurer = ColorMeasurer()
+    measurer = ColorMeasurer(robot_ip=args.ip, camera_port=args.port)
     measurer.run()
 
 if __name__ == "__main__":
