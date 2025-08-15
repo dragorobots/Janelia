@@ -12,7 +12,6 @@ import math
 import sys, select, termios, tty
 
 # --- Constants and Configuration ---
-COUNT_FILE = os.path.expanduser("~/cheerio_count.txt")
 
 MANUAL_CONTROL_MSG = """
 _____________________
@@ -44,11 +43,10 @@ class RobotState:
     PICK_COLOR = 1
     FOLLOWING_LINE = 2
     WAITING_FOR_RAT = 3
-    DISPENSING = 4
-    TURNING = 5
-    RETURNING_HOME = 6
-    RESET = 7
-    MANUAL_CONTROL = 8
+    TURNING = 4
+    RETURNING_HOME = 5
+    RESET = 6
+    MANUAL_CONTROL = 7
 
 # State machine for the more detailed line-following logic
 class FollowState:
@@ -70,7 +68,6 @@ class HideAndSeekNode(Node):
         self.buzzer_pub = self.create_publisher(UInt16, '/beep', 10)
         self.lidar_sub = self.create_subscription(LaserScan, '/scan', self.lidar_callback, 10)
         self.servo1_pub = self.create_publisher(Int32, '/servo_s1', 10) # Camera Yaw
-        self.servo2_pub = self.create_publisher(Int32, '/servo_s2', 10) # Dispenser
         
         # --- PC Communication Subscribers ---
         self.target_spot_sub = self.create_subscription(Int32, '/hide_and_seek/target_spot', self.target_spot_callback, 10)
@@ -108,7 +105,6 @@ class HideAndSeekNode(Node):
         self.SEARCH_DURATION_LEFT = 2.7   # 90 degrees left
         self.SEARCH_DURATION_RIGHT = 2.7  # 90 degrees right
         self.initial_camera_yaw = 0
-        self.initial_dispenser_angle = 0
         self.turn_duration = 7.5
         self.WAIT_DURATION = 120.0
 
@@ -253,12 +249,11 @@ class HideAndSeekNode(Node):
             self.execute_pick_color_phase(display_view)
         elif self.main_state in [RobotState.FOLLOWING_LINE, RobotState.RETURNING_HOME]:
             mask_display = self.execute_line_follow(display_view, returning=(self.main_state == RobotState.RETURNING_HOME))
-            if mask_display is not None:
+            if mask_display is not None and mask_display.size > 0:
                 display_view = cv2.hconcat([display_view, mask_display])
         elif self.main_state == RobotState.WAITING_FOR_RAT:
             self.execute_wait_for_rat(display_view)
-        elif self.main_state == RobotState.DISPENSING:
-            self.execute_dispense_phase()
+
         elif self.main_state == RobotState.TURNING:
             self.execute_turn_phase(display_view)
         elif self.main_state == RobotState.RESET:
@@ -316,8 +311,7 @@ class HideAndSeekNode(Node):
                 progress_msg.data = "following_line"
         elif self.main_state == RobotState.WAITING_FOR_RAT:
             progress_msg.data = "waiting_for_rat"
-        elif self.main_state == RobotState.DISPENSING:
-            progress_msg.data = "dispensing"
+
         elif self.main_state == RobotState.TURNING:
             progress_msg.data = "turning_180"
         elif self.main_state == RobotState.RETURNING_HOME:
@@ -347,13 +341,11 @@ class HideAndSeekNode(Node):
     def start_trial(self):
         """Start the trial - called from PC or manual key press"""
         self.get_logger().info("TRIAL STARTING - Signaling trial start.")
-        self.get_logger().info("Centering camera and setting dispenser to zero position.")
+        self.get_logger().info("Centering camera to zero position.")
         
-        # Center camera and dispenser
+        # Center camera
         s1_msg = Int32(); s1_msg.data = self.initial_camera_yaw
         self.servo1_pub.publish(s1_msg)
-        s2_msg = Int32(); s2_msg.data = self.initial_dispenser_angle
-        self.servo2_pub.publish(s2_msg)
         time.sleep(1.0)
 
         # Beep sequence
@@ -561,7 +553,7 @@ class HideAndSeekNode(Node):
         # Check for PC manual found signal
         if self.pc_manual_found and self.pc_rat_mode == "manual":
             self.get_logger().info("STATE: WAITING_FOR_RAT - PC manual 'rat found' signal!")
-            self.main_state = RobotState.DISPENSING
+            self.main_state = RobotState.TURNING
             self.pc_manual_found = False
             self.action_start_time = None
             self.lidar_baseline = None
@@ -573,7 +565,7 @@ class HideAndSeekNode(Node):
         
         elif self.rat_detected and self.pc_rat_mode == "auto":
             self.get_logger().info("STATE: WAITING_FOR_RAT - Rat detected!")
-            self.main_state = RobotState.DISPENSING
+            self.main_state = RobotState.TURNING
             self.rat_detected = False
             self.action_start_time = None
             self.lidar_baseline = None
@@ -590,13 +582,7 @@ class HideAndSeekNode(Node):
             self.lidar_baseline = None
 
 
-    def execute_dispense_phase(self):
-        self.get_logger().info("STATE: DISPENSING - Dispensing reward.")
-        self.dispense_cheerio()
-        self.get_logger().info("Waiting for rat to retrieve reward...")
-        time.sleep(5.0)
-        self.main_state = RobotState.TURNING
-        self.action_start_time = None
+
 
     def execute_turn_phase(self, frame):
         if self.action_start_time is None:
@@ -721,45 +707,7 @@ class HideAndSeekNode(Node):
     def stop_robot(self):
         self.cmd_vel_pub.publish(Twist())
 
-    def get_cheerio_count(self):
-        if not os.path.exists(COUNT_FILE):
-            with open(COUNT_FILE, "w") as f: f.write("0")
-            return 0
-        try:
-            with open(COUNT_FILE, "r") as f: return int(f.read().strip())
-        except (IOError, ValueError): return 0
 
-    def save_cheerio_count(self, count):
-        with open(COUNT_FILE, "w") as f: f.write(str(count))
-
-    def dispense_cheerio(self):
-        self.get_logger().info("Dispensing a cheerio...")
-        try:
-            count = self.get_cheerio_count()
-            if count >= 12:
-                self.get_logger().warn("Cheerio dispenser is empty! Please reload.")
-                self.save_cheerio_count(0)
-                msg = Int32(); msg.data = self.initial_dispenser_angle
-                self.servo2_pub.publish(msg)
-                return
-
-            target_angle = (count + 1) * 15
-            self.get_logger().info(f"Dispensing cheerio #{count + 1}. Moving to {target_angle} degrees.")
-
-            msg = Int32()
-            msg.data = target_angle
-            self.servo2_pub.publish(msg)
-            time.sleep(1.0)
-
-            self.get_logger().info("Jostling to release...")
-            msg.data = target_angle - 5; self.servo2_pub.publish(msg); time.sleep(0.5)
-            msg.data = target_angle + 5; self.servo2_pub.publish(msg); time.sleep(0.5)
-            msg.data = target_angle; self.servo2_pub.publish(msg); time.sleep(0.5)
-
-            self.save_cheerio_count(count + 1)
-            self.get_logger().info("Dispense complete.")
-        except Exception as e:
-            self.get_logger().error(f"Failed to dispense cheerio: {e}")
 
 class simplePID:
     def __init__(self, p, i, d):
