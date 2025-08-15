@@ -103,7 +103,7 @@ class HideAndSeekNode(Node):
         # Calculate duration for 90-degree turns (90° = π/2 radians)
         # At 0.6 rad/s, 90° takes: (π/2) / 0.6 ≈ 2.62 seconds
         self.SEARCH_DURATION_LEFT = 2.7   # 90 degrees left
-        self.SEARCH_DURATION_RIGHT = 8.1  # 270 degrees right (3x more turning)
+        self.SEARCH_DURATION_RIGHT = 5.5  # 5.5 seconds right (user specified)
         self.initial_camera_yaw = 0
         self.turn_duration = 7.5
         self.WAIT_DURATION = 120.0
@@ -517,6 +517,7 @@ class HideAndSeekNode(Node):
                 self.follow_state = FollowState.SEARCHING
                 self.action_start_time = time.time()
                 self.search_direction = 1
+                self.recenter_attempt = False
                 self.stop_robot()
 
         elif self.follow_state == FollowState.SEARCHING:
@@ -533,19 +534,26 @@ class HideAndSeekNode(Node):
                     self.get_logger().info(f"Searching: {elapsed_time:.1f}s / {duration_this_turn:.1f}s, direction: {'left' if self.search_direction == 1 else 'right'}")
                 else:
                     if self.search_direction == 1:
-                        self.get_logger().info("90° left search complete, switching to 270° right search.")
+                        self.get_logger().info("90° left search complete, switching to 5.5s right search.")
                         self.search_direction = -1
                         self.action_start_time = time.time()
                     else:
-                        self.get_logger().info("360° search complete (90° left + 270° right), line not found.")
-                        self.follow_state = FollowState.STOPPED
-                        self.stop_robot()
-                        if not returning: 
-                            self.main_state = RobotState.WAITING_FOR_RAT
-                            self.lidar_ready_time = time.time() + self.LIDAR_GRACE_PERIOD
-                            self.lidar_baseline = None
-                        else: 
-                            self.main_state = RobotState.RESET
+                        if not hasattr(self, 'recenter_attempt') or not self.recenter_attempt:
+                            self.get_logger().info("5.5s right search complete, attempting 2.7s left recenter.")
+                            # Try to recenter by turning left for 2.7 seconds
+                            self.search_direction = 1
+                            self.action_start_time = time.time()
+                            self.recenter_attempt = True
+                        else:
+                            self.get_logger().info("Search complete (90° left + 5.5s right + 2.7s left recenter), line not found.")
+                            self.follow_state = FollowState.STOPPED
+                            self.stop_robot()
+                            if not returning: 
+                                self.main_state = RobotState.WAITING_FOR_RAT
+                                self.lidar_ready_time = time.time() + self.LIDAR_GRACE_PERIOD
+                                self.lidar_baseline = None
+                            else: 
+                                self.main_state = RobotState.RESET
 
         elif self.follow_state == FollowState.STOPPED:
             self.stop_robot()
@@ -610,14 +618,15 @@ class HideAndSeekNode(Node):
             self.follow_state = FollowState.SEARCHING
             self.action_start_time = time.time()
             self.search_direction = 1
+            self.recenter_attempt = False
 
     def execute_reset_phase(self):
         self.get_logger().info("STATE: RESET - Trial complete.")
         self.stop_robot()
         self.buzzer_pub.publish(UInt16(data=1)); time.sleep(0.5)
         self.buzzer_pub.publish(UInt16(data=0))
-        self.main_state = RobotState.MANUAL_CONTROL
-        print(MANUAL_CONTROL_MSG)
+        self.main_state = RobotState.START
+        self.get_logger().info("Returned to START state. Camera idle, waiting for next 'Start Trial' command.")
 
     def execute_manual_control(self):
         key = self.getKey()

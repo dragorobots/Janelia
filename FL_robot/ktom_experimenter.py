@@ -719,6 +719,17 @@ Step-by-Step Process:
 
 5) Start trial when ready
    • Click the big green START TRIAL button below
+
+🎯 Robot Trial Progress:
+   The robot will automatically progress through these steps:
+   • Step 1: Leave entrance (line following)
+   • Step 2: Reach intersection & start new line
+   • Step 3: Follow the line to hiding spot
+   • Step 4: Wait at hiding spot (detect rat)
+   • Step 5: Wait 10s, turn 180°
+   • Step 6: Follow line back (same color)
+   • Step 7: Reach intersection & return to start
+   • Step 8: Wait for new command, turn 180°, reset
         """
         
         instructions_label = ttk.Label(instructions_frame, text=instructions_text, 
