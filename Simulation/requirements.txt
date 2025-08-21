@@ -12,6 +12,9 @@ Pillow>=8.0.0
 # Visualization
 matplotlib>=3.5.0
 
+# Serial communication for robot data collection
+pyserial>=3.5
+
 # Testing framework
 pytest>=6.0.0
 pytest-cov>=2.10.0
@@ -20,3 +23,9 @@ pytest-cov>=2.10.0
 black>=21.0.0
 flake8>=3.8.0
 mypy>=0.910
+
+# Optional: ROS2 support (if available)
+# rclpy>=0.1.0
+# sensor_msgs>=0.1.0
+# geometry_msgs>=0.1.0
+# nav_msgs>=0.1.0
